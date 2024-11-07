@@ -1,0 +1,63 @@
+Bootstrap: docker
+From: nvcr.io/nvidia/pytorch:23.06-py3
+
+%labels
+    Maintainer sam_FAS
+
+%files
+    # Inclui o arquivo requirements.txt na imagem
+    requirements.txt requirements.txt
+
+%post
+    # Configurações de ambiente
+    export DEBIAN_FRONTEND=noninteractive
+
+    # Atualiza pacotes e instala dependências do sistema
+    apt-get update && apt-get install -y \
+        build-essential \
+        bzip2 \
+        ca-certificates \
+        cmake \
+        curl \
+        git \
+        htop \
+        libssl-dev \
+        nvtop \
+        net-tools \
+        pandoc \
+        python3-sphinx \
+        tmux \
+        tree \
+        unrar \
+        unzip \
+        vim \
+        wget \
+        xdot \
+        opencpn
+
+    # Limpa cache para liberar espaço
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+    # Atualiza pip e instala pacotes globais
+    python -m pip install --upgrade pip setuptools pytest
+
+    # Instala pacotes especificados no arquivo requirements.txt
+    pip install -r requirements.txt
+
+    # Instala o Minerva-Dev
+    cd Minerva-Dev && pip install .
+    
+%environment
+    # Define variáveis de ambiente
+    export PATH=/usr/local/bin:$PATH
+    export LC_ALL=C.UTF-8
+    export LANG=C.UTF-8
+
+%post
+    # Muda o shell para bash
+    chsh --shell /bin/bash
+
+%runscript
+    # Commands to run when the container starts
+    echo "Faz teu nome agr!"

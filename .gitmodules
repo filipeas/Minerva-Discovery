@@ -1,0 +1,3 @@
+[submodule "Minerva-Dev"]
+	path = Minerva-Dev
+	url = https://github.com/discovery-unicamp/Minerva-Dev.git
