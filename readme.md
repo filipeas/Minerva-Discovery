@@ -1,4 +1,14 @@
-## How to execute in local
+# Minerva-Discovery
+- Experiments using Minerva-Dev!
+
+## How clone this repositore
+1) First, head this README.md!
+2) In your machine, execute:
+    - ``` git clone https://github.com/filipeas/Minerva-Discovery.git ```
+    - ``` cd Minerva-Discovery ```
+    - ``` git submodule update --init --recursive ```
+
+## How to execute in local (for test)
 - run ``` ./setup_and_run.sh ```
 
 ## How execute into Ogbon (Petrobras)
@@ -24,8 +34,8 @@
     - https://hpc.senaicimatec.com.br/docs/clusters/job-scheduling/
 
 ## How to run with TMUX
-- Access some node (discovery) and execute: ``` tmux new -s sam_FAS ```.
-- Go to directory (your-directory) and execute: ``` python main.py ```.
+- Access some node (discovery) and execute: ``` tmux new -s sam_FAS ```
+- Go to directory (your-directory) and execute: ``` python main.py ```
 - After this, exit of session executing this: ``` Ctrl + B ``` and press ``` D ```.
-- To access the session, execute: ``` tmux attach -t sam_FAS ```.
-- To list TMUX sessions, execute: ``` tmux ls ```.
+- To access the session, execute: ``` tmux attach -t sam_FAS ```
+- To list TMUX sessions, execute: ``` tmux ls ```

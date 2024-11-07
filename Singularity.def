@@ -32,15 +32,17 @@ From: nvcr.io/nvidia/pytorch:23.06-py3
         unzip \
         vim \
         wget \
-        xdot \
-        opencpn
+        xdot && \
 
     # Limpa cache para liberar espaço
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* && \
+    apt autoremove && apt clean
 
     # Atualiza pip e instala pacotes globais
-    python -m pip install --upgrade pip setuptools pytest
+    python -m pip install --upgrade pip setuptools pytest && \
+    python -m pip install \
+        black \
+        ipykernel \
 
     # Instala pacotes especificados no arquivo requirements.txt
     pip install -r requirements.txt
@@ -51,12 +53,6 @@ From: nvcr.io/nvidia/pytorch:23.06-py3
 %environment
     # Define variáveis de ambiente
     export PATH=/usr/local/bin:$PATH
-    export LC_ALL=C.UTF-8
-    export LANG=C.UTF-8
-
-%post
-    # Muda o shell para bash
-    chsh --shell /bin/bash
 
 %runscript
     # Commands to run when the container starts
