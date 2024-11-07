@@ -4,3 +4,9 @@ experiment
 # pastas shared e buid do minerva
 .hypothesis/
 shared_data
+
+# patas do lightning
+lightning_logs
+
+# ignorar pastas de resultados
+experiment_*
