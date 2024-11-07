@@ -7,6 +7,7 @@ From: nvcr.io/nvidia/pytorch:23.06-py3
 %files
     # Inclui o arquivo requirements.txt na imagem
     requirements.txt requirements.txt
+    Minerva-Dev /Minerva-Dev
 
 %post
     # Configurações de ambiente
