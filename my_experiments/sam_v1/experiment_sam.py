@@ -24,6 +24,7 @@ from patchify import patchify
 from tqdm import tqdm
 import argparse
 import json
+from datetime import datetime
 
 def _init_experiment(
         image_size=512,
@@ -38,7 +39,12 @@ def _init_experiment(
         train_path="/workspaces/Minerva-Dev-Containe",
         annotation_path="/workspaces/Minerva-Dev-Containe"
         ):
-    
+    # Gerar um identificador único baseado no timestamp atual
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Criar o diretório único para salvar os gráficos
+    save_dir = Path(os.getcwd()) / f"experiment_{timestamp}"
+    save_dir.mkdir(parents=True, exist_ok=True)
+
     # Inicializar listas para armazenar os resultados
     results = {ratio: {'train_metrics': [], 'val_metrics': [], 'test_metrics': []} for ratio in data_ratios}
 
@@ -96,7 +102,7 @@ def _init_experiment(
     plt.bar(["1% dos Dados", "100% dos Dados"], [means[0.01], means[1.0]], yerr=[stds[0.01], stds[1.0]], capsize=5)
     plt.ylabel('mIoU Médio')
     plt.title('Comparação de mIoU para 1% e 100% dos Dados')
-    plt.savefig('miou_comparison.png')
+    plt.savefig(save_dir / 'miou_comparison.png')
     # plt.close()
     
     def extract_metric(metrics, metric_name):
@@ -137,7 +143,7 @@ def _init_experiment(
         plt.ylabel("Loss")
         plt.title(f"Loss no Treinamento e Validação - {label}")
         plt.legend()
-        plt.savefig(f'train_val_loss_{int(ratio*100)}.png')
+        plt.savefig(save_dir / f'train_val_loss_{int(ratio*100)}.png')
         
         # Gráfico de mIoU
         plt.figure(figsize=(10, 6))
@@ -149,7 +155,7 @@ def _init_experiment(
         plt.ylabel("mIoU")
         plt.title(f"mIoU no Treinamento e Validação - {label}")
         plt.legend()
-        plt.savefig(f'train_miou_{int(ratio*100)}.png')
+        plt.savefig(save_dir / f'train_miou_{int(ratio*100)}.png')
         # plt.close()
 
 # Função para treinar e testar o modelo
