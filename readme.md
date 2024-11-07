@@ -9,7 +9,9 @@
     - ``` git submodule update --init --recursive ```
 
 ## How to execute in local (for test)
-- run ``` ./setup_and_run.sh ```
+- Run ``` ./setup_and_run.sh ``` if you run outside of container.
+- Run ``` ./setup_and_run.sh --container ``` if you run outside of container.
+
 
 ## How execute into Ogbon (Petrobras)
 1) Read this README.md file first!

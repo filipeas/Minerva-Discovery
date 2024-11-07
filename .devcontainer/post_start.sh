@@ -1,5 +1,7 @@
 #!/bin/bash
 
+echo "Setup and Run Project"
+./setup_and_run.sh
 
 echo "🎈 Installing Minerva-Dev"
 (cd Minerva-Dev && pip install -e .)
