@@ -1,2 +1,6 @@
 # pasta de venv
 experiment
+
+# pastas shared e buid do minerva
+.hypothesis/
+shared_data
