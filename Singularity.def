@@ -49,7 +49,7 @@ From: nvcr.io/nvidia/pytorch:23.06-py3
     pip install -r requirements.txt
 
     # Instala o Minerva-Dev
-    cd Minerva-Dev && pip install .
+    cd /Minerva-Dev && pip install .
     
 %environment
     # Define variáveis de ambiente
