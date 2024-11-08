@@ -5,8 +5,12 @@ experiment
 .hypothesis/
 shared_data
 
-# patas do lightning
+# patas do lightning e logs
 lightning_logs
+logs
 
 # ignorar pastas de resultados
 experiment_*
+
+# nao ignorar arquivos de experimento py
+!experiment_*.py

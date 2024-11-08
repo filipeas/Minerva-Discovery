@@ -18,6 +18,7 @@ import random
 from scipy.ndimage.interpolation import zoom
 import cv2
 from patchify import patchify
+from einops import repeat
 from tqdm import tqdm
 import argparse
 import json
@@ -35,8 +36,10 @@ def _init_experiment(
         epochs=500, 
         data_ratios=[0.01, 1.0],
         checkpoint_path="/workspaces/Minerva-Dev-Container/shared_data/weights_sam/checkpoints_sam/sam_vit_b_01ec64.pth",
-        train_path="/workspaces/Minerva-Dev-Containe",
-        annotation_path="/workspaces/Minerva-Dev-Containe",
+        train_seismic="",
+        train_labels="",
+        test_seismic="",
+        test_labels="",
         ):
     # Gerar um identificador único baseado no timestamp atual
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -75,7 +78,7 @@ def _init_experiment(
                 # test_metrics={"mIoU": JaccardIndex(task="multiclass", num_classes=6)}
             )
             
-            train_metrics, val_metrics, test_metrics = train_and_evaluate(image_size, model, ratio, epochs, batch_size=batch_size, train_path=train_path, annotation_path=annotation_path)
+            train_metrics, val_metrics, test_metrics = train_and_evaluate(image_size, model, ratio, epochs, batch_size=batch_size, train_seismic=train_seismic, train_labels=train_labels, test_seismic=test_seismic, test_labels=test_labels)
             # Armazene os resultados para cada experimento
             results[ratio]['train_metrics'].append(train_metrics)
             results[ratio]['val_metrics'].append(val_metrics)
@@ -168,23 +171,28 @@ def train_and_evaluate(
         ratio, 
         epochs, 
         batch_size=4,
-        train_path="/workspaces/Minerva-Dev-Container/shared_data/seismic/f3_segmentation/images",
-        annotation_path="/workspaces/Minerva-Dev-Container/shared_data/seismic/f3_segmentation/annotations"
+        train_seismic="",
+        train_labels="",
+        test_seismic="",
+        test_labels=""
         ):
     transformImage = RandomGeneratorForImage((image_size, image_size))
     transformLabel = RandomGeneratorForLabel((image_size, image_size))
 
     # Criando data module com o ratio definido
     data_module = F3DataModule(
-        train_path=train_path,
-        annotations_path=annotation_path,
+        train_seismic=np.load(os.path.join(train_seismic)),
+        train_labels=np.load(os.path.join(train_labels)),
+        test_seismic=np.load(os.path.join(test_seismic)),
+        test_labels=np.load(os.path.join(test_labels)),
+        patch_size=image_size,
+        step=image_size,
         transforms=[transformImage, transformLabel],
         batch_size=batch_size,
         ratio=ratio
     )
 
     # Inicialize o logger e o treinador para cada execução
-    # logger = TensorBoardLogger("logs", name=f"sam_model_{int(ratio*100)}")
     trainer = L.Trainer(
         max_epochs=epochs,
         accelerator="gpu",
@@ -202,129 +210,184 @@ def train_and_evaluate(
     test_metrics = pipeline.run(data=data_module, task="test")
 
     # Extrair métricas (exemplo: mIoU e perda)
-    # print(10*'-')
-    # print("(train_metrics_acc): ", pipeline.model.train_metrics_acc)
-    # print("(train_loss_acc): ", pipeline.model.train_loss_acc)
-    # print("(val_metrics_acc): ", pipeline.model.val_metrics_acc)
-    # print("(val_loss_acc): ", pipeline.model.val_loss_acc)
-    # print("(test): ", test_metrics)
-    # print(10*'-')
     train_metrics = pipeline.model.train_metrics_acc # todas as métricas de treino
     pipeline.model.train_metrics_acc = []
-    # train_loss = pipeline.model.train_loss_acc['oi'] # todas as loss de treino
     val_metrics = pipeline.model.val_metrics_acc[1:] # todas as métricas de validacao
     pipeline.model.val_metrics_acc = []
-    # val_loss = pipeline.model.val_loss_acc['oi'] # todas as loss de validacao
-
-    del train_path, annotation_path, transformImage, transformLabel, data_module, trainer, pipeline
+    
+    del transformImage, transformLabel, data_module, trainer, pipeline
     gc.collect()
     torch.cuda.empty_cache()
     time.sleep(1)
 
     return train_metrics, val_metrics, test_metrics
 
+class npyReader():
+    def __init__(self, train_seismic, train_labels, patch_size=512, step=512):
+        self.images = np.concatenate((
+            self._cria_patchs_sismicas_inline(train_seismic, patch_size=(patch_size, patch_size), step=step), 
+            self._cria_patchs_sismicas_crossline(train_seismic, patch_size=(patch_size, patch_size), step=step)
+        ), axis=0)
+        
+        self.masks = np.concatenate((
+            self._cria_patchs_labels_inline(train_labels, patch_size=(patch_size, patch_size), step=step), 
+            self._cria_patchs_labels_crossline(train_labels, patch_size=(patch_size, patch_size), step=step)
+        ), axis=0)
+
+    def _rotate_and_flip_patch(self, patch):
+        # Rotaciona -90 graus (equivalente a transpor e depois inverter verticalmente)
+        patch_rotated = cv2.rotate(patch, cv2.ROTATE_90_CLOCKWISE)
+        # Espelha horizontalmente
+        patch_flipped = cv2.flip(patch_rotated, 1)
+        return patch_flipped
+    
+    def _resize_image(self, image, target_shape):
+        return cv2.resize(image, target_shape, interpolation=cv2.INTER_LINEAR)
+
+    def _cria_patchs_sismicas_crossline(self, images, patch_size=(256,256), step=256):
+        all_img_patches = []
+        for crossline_idx in range(images.shape[1]): # iterando no crossline
+            large_image = images[:, crossline_idx, :]
+            target_shape = ((large_image.shape[1] // patch_size[1] + 1) * patch_size[1],
+                            (large_image.shape[0] // patch_size[0] + 1) * patch_size[0])
+            large_image_resized = self._resize_image(large_image, target_shape)
+
+            patches_img = patchify(large_image_resized, patch_size=patch_size, step=step)  #Step=256 for 256 patches means no overlap
+
+            for i in range(patches_img.shape[0]):
+                for j in range(patches_img.shape[1]):
+                    single_patch_img = patches_img[i,j,:,:]
+                    single_patch_img = self._rotate_and_flip_patch(single_patch_img) # Aplica a rotação e espelhamento
+                    all_img_patches.append(single_patch_img)
+        return np.array(all_img_patches)
+
+    def _cria_patchs_sismicas_inline(self, images, patch_size=(256,256), step=256):
+        all_img_patches = []
+        for inline_idx in range(images.shape[0]): # iterando no inline
+            large_image = images[inline_idx, :, :]
+            target_shape = ((large_image.shape[1] // patch_size[1] + 1) * patch_size[1],
+                            (large_image.shape[0] // patch_size[0] + 1) * patch_size[0])
+            large_image_resized = self._resize_image(large_image, target_shape)
+
+            patches_img = patchify(large_image_resized, patch_size=patch_size, step=step)  #Step=256 for 256 patches means no overlap
+
+            for i in range(patches_img.shape[0]):
+                for j in range(patches_img.shape[1]):
+                    single_patch_img = patches_img[i,j,:,:]
+                    single_patch_img = self._rotate_and_flip_patch(single_patch_img) # Aplica a rotação e espelhamento
+                    all_img_patches.append(single_patch_img)
+        return np.array(all_img_patches)
+
+    def _cria_patchs_labels_crossline(self, images_labels, patch_size=(256,256), step=256):
+        all_mask_patches = []
+        for crossline_idx in range(images_labels.shape[1]): # iterando no crossline
+            large_mask = images_labels[:, crossline_idx, :]
+            target_shape = ((large_mask.shape[1] // patch_size[1] + 1) * patch_size[1],
+                            (large_mask.shape[0] // patch_size[0] + 1) * patch_size[0])
+            large_mask_resized = self._resize_image(large_mask, target_shape)
+
+            patches_mask = patchify(large_mask_resized, patch_size=patch_size, step=step)  #Step=256 for 256 patches means no overlap
+
+            for i in range(patches_mask.shape[0]):
+                for j in range(patches_mask.shape[1]):
+                    single_patch_mask = patches_mask[i,j,:,:]
+                    single_patch_mask = self._rotate_and_flip_patch(single_patch_mask) # Aplica a rotação e espelhamento
+                    all_mask_patches.append(single_patch_mask)
+        return np.array(all_mask_patches)
+
+    def _cria_patchs_labels_inline(self, images_labels, patch_size=(256,256), step=256):
+        all_mask_patches = []
+        for inline_idx in range(images_labels.shape[0]): # iterando no inline
+            large_mask = images_labels[inline_idx, :, :]
+            target_shape = ((large_mask.shape[1] // patch_size[1] + 1) * patch_size[1],
+                            (large_mask.shape[0] // patch_size[0] + 1) * patch_size[0])
+            large_mask_resized = self._resize_image(large_mask, target_shape)
+
+            patches_mask = patchify(large_mask_resized, patch_size=patch_size, step=step)  #Step=256 for 256 patches means no overlap
+
+            for i in range(patches_mask.shape[0]):
+                for j in range(patches_mask.shape[1]):
+                    single_patch_mask = patches_mask[i,j,:,:]
+                    single_patch_mask = self._rotate_and_flip_patch(single_patch_mask) # Aplica a rotação e espelhamento
+                    all_mask_patches.append(single_patch_mask)
+        return np.array(all_mask_patches)
+
 class RandomGeneratorForImage(_Transform):
     def __init__(self, output_size):
         self.output_size = output_size
         
-    def __call__(self, sample: np.ndarray) -> np.ndarray:
-        channels, x, y = sample.shape
+    def __call__(self, image: np.ndarray) -> np.ndarray:
+        x, y = image.shape
+        if x != self.output_size[0] or y != self.output_size[1]:
+            image = zoom(image, (self.output_size[0] / x, self.output_size[1] / y), order=3)
+        image = torch.from_numpy(image.astype(np.float32)).unsqueeze(0)
+        image = repeat(image, 'c h w -> (repeat c) h w', repeat=3)
         
-        # Redimensiona cada canal individualmente para evitar o erro de dimensão
-        resized_channels = [
-            zoom(sample[c], (self.output_size[0] / x, self.output_size[1] / y), order=3)
-            for c in range(channels)
-        ]
-        
-        # Converte a lista de canais redimensionados de volta para um array numpy e, em seguida, para um tensor PyTorch
-        image = np.stack(resized_channels, axis=0).astype(np.float32)
-        image = torch.from_numpy(image)
         return image
 
 class RandomGeneratorForLabel(_Transform):
     def __init__(self, output_size):
         self.output_size = output_size
 
-    def __call__(self, sample: np.ndarray) -> np.ndarray:
-        label = sample
-
+    def __call__(self, label: np.ndarray) -> np.ndarray:
         x, y = label.shape
         if x != self.output_size[0] or y != self.output_size[1]:
             label = zoom(label, (self.output_size[0] / x, self.output_size[1] / y), order=0)
         label = torch.from_numpy(label.astype(np.float32))
         return label.long()
 
-def rotate_and_flip_patch(patch_img, patch_label):
-    rotate = cv2.ROTATE_90_CLOCKWISE
-    # Rotaciona -90 graus (equivalente a transpor e depois inverter verticalmente)
-    patch_img_rotated = cv2.rotate(patch_img, rotate)
-    patch_label_rotated = cv2.rotate(patch_label, rotate)
-    # Espelha horizontalmente
-    patch_img_flipped = cv2.flip(patch_img_rotated, 1)
-    patch_label_flipped = cv2.flip(patch_label_rotated, 1)
-    return patch_img_flipped, patch_label_flipped
-
-def resize_image(image, target_shape):
-    return cv2.resize(image, target_shape, interpolation=cv2.INTER_LINEAR)
-
-def cria_patchs_sismicas(images, labels, patch_size=(512,512), step=512):
-    all_img_patches = []
-    all_label_patches = []
-    for i, large_image in enumerate(images): # iterando as imagens
-        target_shape = ((large_image.shape[1] // patch_size[1] + 1) * patch_size[1],
-                        (large_image.shape[0] // patch_size[0] + 1) * patch_size[0])
-        
-        large_image_resized = resize_image(np.array(large_image), target_shape)
-        label = np.array(labels[i]).astype(np.uint8)
-        large_label_resized = resize_image(label, target_shape)
-        
-        # Verifica se as dimensões redimensionadas são múltiplos exatos do patch_size
-        assert large_image_resized.shape[0] % patch_size[0] == 0, "Altura da imagem não é múltipla do patch_size."
-        assert large_image_resized.shape[1] % patch_size[1] == 0, "Largura da imagem não é múltipla do patch_size."
-        assert large_label_resized.shape[0] % patch_size[0] == 0, "Altura da label não é múltipla do patch_size."
-        assert large_label_resized.shape[1] % patch_size[1] == 0, "Largura da label não é múltipla do patch_size."
-
-        patches_img = patchify(large_image_resized, patch_size=patch_size + (3,), step=step)
-        patches_label = patchify(large_label_resized, patch_size=patch_size, step=step)
-        
-        for i in range(patches_img.shape[0]):
-            for j in range(patches_img.shape[1]):
-                single_patch_img = patches_img[i, j, 0]  # Remove a dimensão extra da Imagem
-                single_patch_label = patches_label[i, j]  # Remove a dimensão extra da Label
-                
-                # Converte o patch da imagem para float32
-                single_patch_img = np.transpose(single_patch_img, (2, 0, 1)).astype(np.float32)
-                # Converte o patch do rótulo para int64 (long)
-                single_patch_label = single_patch_label.astype(np.int64)
-                
-                all_img_patches.append(single_patch_img)
-                all_label_patches.append(single_patch_label)
-    return np.array(all_img_patches), np.array(all_label_patches)
-
 class F3DataModule(L.LightningDataModule):
     def __init__(
         self,
-        train_path: str,
-        annotations_path: str,
+        train_seismic,
+        train_labels,
+        test_seismic,
+        test_labels,
+        patch_size: int = 512,
+        step: int = 512,
         transforms: _Transform = None,
         batch_size: int = 1,
         num_workers: int = None,
         ratio: float = 1.0
     ):
         super().__init__()
-        self.train_path = Path(train_path)
-        self.annotations_path = Path(annotations_path)
+        self.train_seismic = train_seismic
+        self.train_labels = train_labels
+        self.test_seismic = test_seismic
+        self.test_labels = test_labels
+        self.patch_size = patch_size
+        self.step = step
         self.transforms = transforms
         self.batch_size = batch_size
-        self.num_workers = num_workers if num_workers is not None else os.cpu_count()
+        self.num_workers = (
+            num_workers if num_workers is not None else os.cpu_count()
+        )
         self.ratio = ratio
 
         self.datasets = {}
 
     def setup(self, stage=None):
         if stage == "fit":
-            train_img_reader = TiffReader(self.train_path / "train")
-            train_label_reader = PNGReader(self.annotations_path / "train")
+            npy_files = npyReader(
+                train_seismic=self.train_seismic, 
+                train_labels=self.train_labels, 
+                patch_size=self.patch_size, 
+                step=self.step
+            )
+            train_imgs = npy_files.images
+            train_labels = npy_files.masks
+
+            # Dividir 80/20 para treino e validação
+            num_train_samples = int(len(train_imgs) * 0.8)
+            indices = list(range(len(train_imgs)))
+            random.shuffle(indices)
+            train_indices = indices[:num_train_samples]
+            val_indices = indices[num_train_samples:]
+
+            train_img_reader = [train_imgs[i] for i in train_indices]
+            train_label_reader = [train_labels[i] for i in train_indices]
+            val_img_reader = [train_imgs[i] for i in val_indices]
+            val_label_reader = [train_labels[i] for i in val_indices]
 
             # Aplica o ratio para limitar a quantidade de dados de treinamento
             num_train_samples = int(len(train_img_reader) * self.ratio)
@@ -333,54 +396,37 @@ class F3DataModule(L.LightningDataModule):
                 train_img_reader = [train_img_reader[i] for i in indices]
                 train_label_reader = [train_label_reader[i] for i in indices]
             
-            train_imgs, train_labels = cria_patchs_sismicas(train_img_reader, train_label_reader)
-
-            del train_img_reader, train_label_reader
-            gc.collect()
-            torch.cuda.empty_cache()
-
             train_dataset = SupervisedReconstructionDataset(
-                readers=[train_imgs, train_labels],
+                readers=[train_img_reader, train_label_reader],
                 transforms=self.transforms,
             )
             print(f"Qtd. train_dataset: {len(train_dataset)}")
 
-            val_img_reader = TiffReader(self.train_path / "val")
-            val_label_reader = PNGReader(self.annotations_path / "val")
-
-            val_imgs, val_labels = cria_patchs_sismicas(val_img_reader, val_label_reader)
-
             val_dataset = SupervisedReconstructionDataset(
-                readers=[val_imgs, val_labels],
+                readers=[val_img_reader, val_label_reader],
                 transforms=self.transforms,
             )
-            print(f"Qtd. val_dataset: {len(val_dataset)}")
 
             self.datasets["train"] = train_dataset
             self.datasets["val"] = val_dataset
 
-            del train_imgs, train_labels
-            del val_img_reader, val_label_reader, val_imgs, val_labels
-            gc.collect()
-            torch.cuda.empty_cache()
-
         elif stage == "test" or stage == "predict":
-            test_img_reader = TiffReader(self.train_path / "test")
-            test_label_reader = PNGReader(self.annotations_path / "test")
-
-            test_imgs, test_labels = cria_patchs_sismicas(test_img_reader, test_label_reader)
+            npy_files = npyReader(
+                train_seismic=self.test_seismic, 
+                train_labels=self.test_labels, 
+                patch_size=self.patch_size, 
+                step=self.step
+            )
+            test_imgs = npy_files.images
+            test_labels = npy_files.masks
 
             test_dataset = SupervisedReconstructionDataset(
                 readers=[test_imgs, test_labels],
                 transforms=self.transforms,
             )
-            print(f"Qtd test_dataset: {len(test_dataset)}")
             self.datasets["test"] = test_dataset
             self.datasets["predict"] = test_dataset
 
-            del test_img_reader, test_label_reader, test_imgs, test_labels
-            gc.collect()
-            torch.cuda.empty_cache()
         else:
             raise ValueError(f"Invalid stage: {stage}")
 
@@ -457,8 +503,10 @@ if __name__ == "__main__":
     epochs = config["epochs"]
     data_ratios = config["data_ratios"]
     checkpoint_sam = config["checkpoint_sam"]
-    train_path = config["train_path"]
-    annotation_path = config["annotation_path"]
+    train_seismic = config["train_seismic"]
+    train_labels = config["train_labels"]
+    test_seismic = config["test_seismic"]
+    test_labels = config["test_labels"]
 
     # Verificação do tipo para data_ratios
     if not isinstance(data_ratios, list):
@@ -478,11 +526,14 @@ if __name__ == "__main__":
     print(f"{'epochs':<20} {epochs}")
     print(f"{'data_ratios':<20} {data_ratios}")
     print(f"{'checkpoint_sam':<20} {checkpoint_sam}")
-    print(f"{'train_path':<20} {train_path}")
-    print(f"{'annotation_path':<20} {annotation_path}")
+    print(f"{'train_seismic':<20} {train_seismic}")
+    print(f"{'train_labels':<20} {train_labels}")
+    print(f"{'test_seismic':<20} {test_seismic}")
+    print(f"{'test_labels':<20} {test_labels}")
     print(20*'-')
 
     _init_experiment(
+        config_path=args.config,
         image_size=image_size, 
         num_classes=num_classes,
         batch_size=batch_size,
@@ -492,9 +543,10 @@ if __name__ == "__main__":
         epochs=epochs, 
         data_ratios=data_ratios,
         checkpoint_path=checkpoint_sam,
-        train_path=train_path,
-        annotation_path=annotation_path,
-        config_path=args.config
+        train_seismic=train_seismic,
+        train_labels=train_labels,
+        test_seismic=test_seismic,
+        test_labels=test_labels,
     )
     print("___END OF EXPERIMENT___")
     print("Good Night ;p")

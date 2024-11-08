@@ -1,0 +1,15 @@
+{
+    "image_size": 512,
+    "num_classes": 5,
+    "batch_size": 7,
+    "alpha": 1,
+    "rank": 4,
+    "n": 10,
+    "epochs": 500,
+    "data_ratios": [0.01, 1.0],
+    "checkpoint_sam": "/workspaces/Minerva-Discovery/shared_data/weights_sam/checkpoints_sam/sam_vit_b_01ec64.pth",
+    "train_seismic": "/workspaces/Minerva-Discovery/shared_data/data_filipe/f3_in_npy/train/train_seismic.npy",
+    "train_labels": "/workspaces/Minerva-Discovery/shared_data/data_filipe/f3_in_npy/train/train_labels.npy",
+    "test_seismic": "/workspaces/Minerva-Discovery/shared_data/data_filipe/f3_in_npy/test_once/test1_seismic.npy",
+    "test_labels": "/workspaces/Minerva-Discovery/shared_data/data_filipe/f3_in_npy/test_once/test1_labels.npy"
+}
