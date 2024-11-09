@@ -34,11 +34,11 @@ From: nvcr.io/nvidia/pytorch:23.06-py3
         vim \
         wget \
         xdot \
-        opencpn && \
+        opencpn
 
     # Limpa cache para liberar espaço
-    rm -rf /var/lib/apt/lists/* && \
-    apt autoremove && apt clean
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
     # Atualiza pip e instala pacotes globais
     python -m pip install --upgrade pip setuptools pytest && \
@@ -47,7 +47,7 @@ From: nvcr.io/nvidia/pytorch:23.06-py3
         ipykernel \
 
     # Remove o opencv caso já esteja instalado na imagem base
-    pip uninstall -y opencv-python opencv-python-headless opencv
+    # pip uninstall -y opencv-python opencv-python-headless opencv
     
     # Instala pacotes especificados no arquivo requirements.txt
     pip install -r requirements.txt
@@ -58,7 +58,13 @@ From: nvcr.io/nvidia/pytorch:23.06-py3
 %environment
     # Define variáveis de ambiente
     export PATH=/usr/local/bin:$PATH
+    export LC_ALL=C.UTF-8
+    export LANG=C.UTF-8
 
+%post
+    # Muda o shell para bash
+    chsh --shell /bin/bash
+    
 %runscript
     # Commands to run when the container starts
     echo "Faz teu nome agr!"
