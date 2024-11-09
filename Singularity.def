@@ -46,6 +46,9 @@ From: nvcr.io/nvidia/pytorch:23.06-py3
         black \
         ipykernel \
 
+    # Remove o opencv caso já esteja instalado na imagem base
+    pip uninstall -y opencv-python opencv-python-headless opencv
+    
     # Instala pacotes especificados no arquivo requirements.txt
     pip install -r requirements.txt
 
