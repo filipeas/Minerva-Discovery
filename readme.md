@@ -41,3 +41,8 @@
 - After this, exit of session executing this: ``` Ctrl + B ``` and press ``` D ```.
 - To access the session, execute: ``` tmux attach -t sam_FAS ```
 - To list TMUX sessions, execute: ``` tmux ls ```
+
+## How to send datasets to some server
+- If you need use some dataset, for example F3 or Seam ai and if this datasets stay in your local or in another server, you can transfer dataset between machines using scp command. For example:
+
+- To transfer seam ai from Ogbon to Coaraci (server of unicamp's phisics course), execute: ``` scp -r pasta-do-dataset-na-maquina-de-origem username@host.name.com.:/home/users/local-de-destino ```
