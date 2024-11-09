@@ -10,4 +10,4 @@ echo "Running on node: $(hostname)"
 echo "Allocated GPU(s): $CUDA_VISIBLE_DEVICES"
 
 # Executa o container Singularity com suporte a GPU e roda o script de setup
-singularity exec --nv ../../Singularity.sif bash python experiment_sam.py --config config_experiment_sam.json
+singularity exec --nv ../../Singularity.sif bash execute.sh
