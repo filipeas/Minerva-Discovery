@@ -1,5 +1,5 @@
 patchify
 matplotlib
 scipy
-opencv-python
+opencv-python-headless
 Pillow
