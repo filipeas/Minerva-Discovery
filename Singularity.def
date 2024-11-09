@@ -33,7 +33,8 @@ From: nvcr.io/nvidia/pytorch:23.06-py3
         unzip \
         vim \
         wget \
-        xdot && \
+        xdot \
+        opencpn && \
 
     # Limpa cache para liberar espaço
     rm -rf /var/lib/apt/lists/* && \
