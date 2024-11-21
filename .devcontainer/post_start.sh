@@ -1,10 +1,10 @@
 #!/bin/bash
 
 echo "Setup and Run Project"
-./setup_and_run.sh
+./setup_and_run.sh --container
 
-echo "🎈 Installing Minerva-Dev"
-(cd Minerva-Dev && pip install -e .)
+# echo "🎈 Installing Minerva-Dev"
+# (cd Minerva-Dev && pip install -e .)
 
 
 echo "🎈 Everything installed"

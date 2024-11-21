@@ -15,6 +15,7 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
         curl \
         git \
         htop \
+        libgl1-mesa-glx \
         libssl-dev \
         nvtop \
         net-tools \

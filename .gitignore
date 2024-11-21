@@ -8,6 +8,7 @@ shared_data
 # patas do lightning e logs
 lightning_logs
 logs
+checkpoints
 
 # ignorar pastas de resultados
 experiment_*

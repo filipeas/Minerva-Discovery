@@ -27,7 +27,7 @@ cd ../../Minerva-Dev && pip install .
 #SBATCH --nodes=1
 #SBATCH --gpus=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=15
+#SBATCH --cpus-per-task=1
 #SBATCH --partition=gpu -i
 #SBATCH --time=120:00:00
 #SBATCH -o out_out.txt
