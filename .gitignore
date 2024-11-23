@@ -16,3 +16,5 @@ results
 
 # nao ignorar arquivos de experimento py
 !experiment_*.py
+
+Singularity.sif
