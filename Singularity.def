@@ -48,12 +48,12 @@ From: nvcr.io/nvidia/pytorch:23.06-py3
 
     # Remove o opencv caso já esteja instalado na imagem base
     # pip uninstall -y opencv-python opencv-python-headless opencv
-    
-    # Instala pacotes especificados no arquivo requirements.txt
-    pip install -r requirements.txt
 
     # Instala o Minerva-Dev
     cd /Minerva-Dev && pip install .
+
+    # Instala pacotes especificados no arquivo requirements.txt
+    cd .. && pip install -r requirements.txt
     
 %environment
     # Define variáveis de ambiente
