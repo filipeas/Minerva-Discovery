@@ -22,14 +22,15 @@ else
     echo "Updating pip..."
     pip install --upgrade pip
 
-    echo "installing requirements..."
-    pip install -r requirements.txt
-
     echo "installing Minerva-Dev..."
     cd Minerva-Dev
     pip install .
 
+    echo "installing requirements..."
+    cd ..
+    pip install -r requirements.txt
+
     echo "executing main.py..."
-    cd ../my_experiments
+    cd my_experiments
     python main.py
 fi

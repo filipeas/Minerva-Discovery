@@ -12,6 +12,7 @@ checkpoints
 
 # ignorar pastas de resultados
 experiment_*
+results
 
 # nao ignorar arquivos de experimento py
 !experiment_*.py
