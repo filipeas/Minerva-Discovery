@@ -31,8 +31,19 @@ from matplotlib import pyplot as plt
 from pathlib import Path
 
 def log_memory():
-    print(f"CPU Memory Usage: {psutil.virtual_memory().percent}%")
-    print(f"GPU Memory Usage: {torch.cuda.memory_allocated() / (1024 ** 3):.2f} GB")
+    # Uso de memória da CPU
+    cpu_memory = psutil.virtual_memory()
+    cpu_used_mb = cpu_memory.used / (1024 ** 2)  # Convertido para MB
+    print(f"CPU Memory Usage: {cpu_memory.percent}% ({cpu_used_mb:.2f} MB)")
+    
+    # Uso de memória da GPU
+    if torch.cuda.is_available():
+        gpu_used_mb = torch.cuda.memory_allocated() / (1024 ** 2)  # Convertido para MB
+        gpu_total_mb = torch.cuda.get_device_properties(0).total_memory / (1024 ** 2)  # Total da GPU em MB
+        print(f"GPU Memory Usage: {gpu_used_mb:.2f} MB / {gpu_total_mb:.2f} MB "
+              f"({(gpu_used_mb / gpu_total_mb) * 100:.2f}%)")
+    else:
+        print("No GPU available.")
 
 def _init_experiment(
         checkpoint_path,
@@ -113,7 +124,9 @@ def _init_experiment(
         # Extrai o valor de cada época para uma métrica específica
         return [[epoch_metrics[metric_name] for epoch_metrics in epoch] for epoch in metrics]
 
-    for ratio, label in zip(data_ratios, ["1% dos Dados", "100% dos Dados"]):
+    for ratio in data_ratios:
+        label = f"{int(ratio*100)}% dos Dados"
+        
         # Calculando métricas para cada época
         train_loss = np.array(extract_metric(results[ratio]['train_metrics'], 'loss'))
         val_loss = np.array(extract_metric(results[ratio]['val_metrics'], 'loss'))
