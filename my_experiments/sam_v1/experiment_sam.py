@@ -114,7 +114,9 @@ def _init_experiment(
 
     # Gráfico de barra para mIoU de 1% e 100% dos dados
     plt.figure(figsize=(8, 6))
-    plt.bar(["1% dos Dados", "100% dos Dados"], [means[0.01], means[1.0]], yerr=[stds[0.01], stds[1.0]], capsize=5)
+    plt.bar([f"{int(ratio*100)}% dos Dados" for ratio in data_ratios], 
+            [means[ratio] for ratio in data_ratios], 
+            yerr=[stds[ratio] for ratio in data_ratios], capsize=5)
     plt.ylabel('mIoU Médio')
     plt.title('Comparação de mIoU para 1% e 100% dos Dados')
     plt.savefig(save_dir / 'miou_comparison.png')
