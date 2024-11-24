@@ -29,6 +29,7 @@
     - This will open a bash for use Slurm. So, after this, run **step 6)**.
 8) (opcional) If you need run using sbatch, use this: 
     - ``` sbatch --output=meu_job.log --error=meu_job.err run_sbatch.sh ```.
+9) **PS: REMEMBER AWAYS BUID SINGULARITY.SIF**
 
 ## Tips
 - In Ogbon (Petrobras), execute ``` srun --partition gpulongd --account asml-gpu --job-name=NOME_DO_PROJETO_OU_EXPERIMENTO --time 120:00:00 --pty bash ``` for interative bash.

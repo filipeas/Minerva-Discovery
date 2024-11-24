@@ -9,6 +9,7 @@ import argparse
 import json
 from datetime import datetime
 import shutil
+import psutil
 
 from scipy.ndimage import gaussian_gradient_magnitude, laplace
 
@@ -28,6 +29,10 @@ from minerva.pipelines.lightning_pipeline import SimpleLightningPipeline
 import matplotlib
 from matplotlib import pyplot as plt
 from pathlib import Path
+
+def log_memory():
+    print(f"CPU Memory Usage: {psutil.virtual_memory().percent}%")
+    print(f"GPU Memory Usage: {torch.cuda.memory_allocated() / (1024 ** 3):.2f} GB")
 
 def _init_experiment(
         checkpoint_path,
@@ -60,6 +65,7 @@ def _init_experiment(
     # Loop pelos experimentos
     for ratio in data_ratios:
         print(f"Executando experimentos com {int(ratio*100)}% dos dados...")
+        log_memory()
         
         for _ in tqdm(range(N)):
             model = SAMLoRA(
