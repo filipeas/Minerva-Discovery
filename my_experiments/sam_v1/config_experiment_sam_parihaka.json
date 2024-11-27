@@ -1,13 +1,13 @@
 {
-    "name": "exp-com-novo-patch-tolstaya-final-parihaka",
+    "name": "exp-final-parihaka",
     "image_size": 255,
     "num_classes": 5,
     "batch_size": 8,
     "alpha": 1,
     "rank": 4,
-    "n": 5,
-    "epochs": 5,
-    "data_ratios": [0.01],
+    "n": 1,
+    "epochs": 30,
+    "data_ratios": [1.0],
     "checkpoint_sam": "/workspaces/Minerva-Discovery/shared_data/weights_sam/checkpoints_sam/sam_vit_b_01ec64.pth",
     "train_path": "/workspaces/Minerva-Discovery/shared_data/seam_ai_datasets/seam_ai/images",
     "annotation_path": "/workspaces/Minerva-Discovery/shared_data/seam_ai_datasets/seam_ai/annotations"

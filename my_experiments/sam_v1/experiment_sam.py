@@ -11,20 +11,21 @@ from datetime import datetime
 import shutil
 import psutil
 
-from scipy.ndimage import gaussian_gradient_magnitude, laplace
-
 import lightning as L
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import CSVLogger
 import torch
 from torch.utils.data import DataLoader
 
-from minerva.data.datasets.supervised_dataset import SupervisedReconstructionDataset
 from minerva.data.readers.png_reader import PNGReader
 from minerva.data.readers.tiff_reader import TiffReader
 from minerva.models.nets.image.segment_anything.sam_lora import SAMLoRA
 from minerva.transforms.transform import _Transform
 from minerva.pipelines.lightning_pipeline import SimpleLightningPipeline
+from minerva.data.datasets.base import SimpleDataset
+from minerva.data.readers.reader import _Reader
+
+from typing import List, Optional, Tuple
 
 import matplotlib
 from matplotlib import pyplot as plt
@@ -76,7 +77,6 @@ def _init_experiment(
     # Loop pelos experimentos
     for ratio in data_ratios:
         print(f"Executando experimentos com {int(ratio*100)}% dos dados...")
-        log_memory()
         
         for _ in tqdm(range(N)):
             model = SAMLoRA(
@@ -86,6 +86,8 @@ def _init_experiment(
                 rank=rank,
                 checkpoint=checkpoint_path
             )
+
+            log_memory() # verificando consumo
             
             train_metrics, val_metrics, test_metrics = train_and_evaluate(image_size, model, ratio, epochs, batch_size=batch_size, train_path=train_path, annotation_path=annotation_path)
             # Armazene os resultados para cada experimento
@@ -189,25 +191,25 @@ def train_and_evaluate(
         ):
 
     # Criando data module com o ratio definido
-    data_module = PatchingTolstayaModule(
+    data_module = PatchingModule(
         train_path=train_path,
         annotations_path=annotation_path,
-        ratio=ratio,
         patch_size=image_size,
         stride=32,
-        batch_size=batch_size
+        batch_size=batch_size,
+        ratio=ratio,
     )
 
-    # current_date = datetime.now().strftime("%Y-%m-%d")
 
     # Define o callback para salvar o modelo com base no menor valor da métrica de validação
-    # checkpoint_callback = ModelCheckpoint(
-    #     monitor="val_loss", # Métrica para monitorar
-    #     dirpath="./checkpoints", # Diretório onde os checkpoints serão salvos
-    #     filename=f"sam_model-final_train-raio-{ratio}-{current_date}-{{epoch:02d}}-{{val_loss:.2f}}", # Nome do arquivo do checkpoint
-    #     save_top_k=1, # Quantos melhores checkpoints salvar (no caso, o melhor)
-    #     mode="min", # Como a métrica deve ser tratada (no caso, 'min' significa que menor valor de val_loss é melhor)
-    # )
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    checkpoint_callback = ModelCheckpoint(
+        monitor="val_loss", # Métrica para monitorar
+        dirpath="./checkpoints", # Diretório onde os checkpoints serão salvos
+        filename=f"final_train-raio-{ratio}-{current_date}-{{epoch:02d}}-{{val_loss:.2f}}", # Nome do arquivo do checkpoint
+        save_top_k=1, # Quantos melhores checkpoints salvar (no caso, o melhor)
+        mode="min", # Como a métrica deve ser tratada (no caso, 'min' significa que menor valor de val_loss é melhor)
+    )
     
     logger = CSVLogger("logs", name="sam_model")
 
@@ -217,7 +219,7 @@ def train_and_evaluate(
         accelerator="gpu",
         devices=1,
         logger=logger,
-        # callbacks=[checkpoint_callback],
+        callbacks=[checkpoint_callback],
     )
 
     # Inicialize o pipeline e execute o treinamento
@@ -251,24 +253,94 @@ def train_and_evaluate(
 
     return train_metrics, val_metrics, test_metrics
 
-class PatchingTolstayaModule(L.LightningDataModule):
+class SupervisedDatasetPatches(SimpleDataset):
+    def __init__(self, readers: List[_Reader], transforms: Optional[_Transform] = None, patch_size: int = 255, stride: int = 32):
+        """Adds support for splitting images into patches.
+
+        Parameters
+        ----------
+        readers: List[_Reader]
+            List of data readers. It must contain exactly 2 readers.
+            The first reader for the input data and the second reader for the
+            target data.
+        transforms: Optional[_Transform]
+            Optional data transformation pipeline.
+        patch_size: int
+            Size of the patches into which the images will be divided.
+        stride: int
+            Stride used to extract patches from images.
+        Raises
+        -------
+            AssertionError: If the number of readers is not exactly 2.
+        """
+        super().__init__(readers, transforms)
+        self.patch_size = patch_size
+        self.stride = stride
+        self._patch_indices = []
+        self._precompute_patch_indices()
+
+        assert (
+            len(self.readers) == 2
+        ), "SupervisedReconstructionDataset requires exactly 2 readers"
+    
+    def _precompute_patch_indices(self):
+        """Precomputes patch indices for all images."""
+        for img_idx in range(len(self.readers[0])):
+            # Obtem a dimensão da imagem para calcular o número de patches
+            image = self.readers[0][img_idx]
+            h, w = image.shape[:2]
+            num_patches_h = (h - self.patch_size) // self.stride + 1
+            num_patches_w = (w - self.patch_size) // self.stride + 1
+            for patch_idx in range(num_patches_h * num_patches_w):
+                self._patch_indices.append((img_idx, patch_idx))
+    
+    def _extract_single_patch(self, data, patch_idx, patch_size=255, stride=32, img_type='image'):
+        if img_type == 'image': # caso seja imagens de entrada (h, w, c)
+            h, w, _ = data.shape
+        else: # caso seja labels de entrada (h, w)
+            h, w = data.shape
+        num_patches_w = (w - patch_size) // stride + 1
+        row = patch_idx // num_patches_w # numero da linha do patch
+        col = patch_idx % num_patches_w # numero da coluna do patch
+        i, j = row * stride, col * stride # coordenada do patch no grid
+        patch = data[i:i + patch_size, j:j + patch_size]
+        if img_type == 'image':
+            return patch.transpose(2, 0, 1).astype(np.float32) # (C H W)
+        else:
+            return patch.astype(np.int64)
+    
+    def __len__(self):
+        """Returns the total number of patches."""
+        return len(self._patch_indices)
+    
+    def __getitem__(self, index: int) -> Tuple[np.ndarray, np.ndarray]:
+        """Load data and return a single patch."""
+        img_idx, patch_idx = self._patch_indices[index]
+        input_data = self.readers[0][img_idx]
+        target_data = self.readers[1][img_idx]
+
+        input_patch = self._extract_single_patch(input_data, patch_idx, img_type='image')
+        target_patch = self._extract_single_patch(target_data, patch_idx, img_type='label')
+        return input_patch, target_patch
+
+class PatchingModule(L.LightningDataModule):
     def __init__(
         self,
         train_path: str,
         annotations_path: str,
-        ratio: float = 1.0,
         patch_size: int = 255,
         stride: int = 32,
         batch_size: int = 8,
+        ratio: int = 1.0,
         transforms: _Transform = None,
         num_workers: int = None,
     ):
         super().__init__()
         self.train_path = Path(train_path)
         self.annotations_path = Path(annotations_path)
-        self.ratio = ratio
         self.transforms = transforms
         self.batch_size = batch_size
+        self.ratio = ratio
         self.patch_size = patch_size
         self.stride = stride
         self.num_workers = num_workers if num_workers else os.cpu_count()
@@ -277,96 +349,24 @@ class PatchingTolstayaModule(L.LightningDataModule):
 
     # função útil
     def normalize_data(self, data, target_min=-1, target_max=1):
-        """
-        Função responsável por normalizar as imagens no intervalo (-1,1)
+        """Function responsible for normalizing images in the range (-1,1)
+
+        Parameters
+        ----------
+        data : np.ndarray
+            Sample (image), with 3 channels
+        target_min : int
+            Min value of target to normalize data.
+        target_max : int
+            Max value of target to normalize data.
+
+        Returns
+        -------
+        np.ndarray
+            Sample (image) normalized.
         """
         data_min, data_max = data.min(), data.max()
         return target_min + (data - data_min) * (target_max - target_min) / (data_max - data_min)
-
-    # função útil
-    def generate_depth_channel(self, shape):
-        """
-        Função responsável por criar o canal de profundidade, com 0 no topo e 1 na base.
-        """
-        depth_channel = np.linspace(0, 1, shape[0]).reshape(-1, 1)
-        return np.tile(depth_channel, (1, shape[1]))
-    
-    # função útil
-    def extract_patches(self, data, patch_size=255, stride=32, img_type='image'):
-        patches = []
-        if img_type == 'image': # caso seja imagens de entrada (h, w, c)
-            h, w, _ = data.shape
-        else: # caso seja labels de entrada (h, w)
-            h, w = data.shape
-        for i in range(0, h - patch_size + 1, stride):
-            for j in range(0, w - patch_size + 1, stride):
-                patch = data[i:i + patch_size, j:j + patch_size]
-                if img_type == 'image':
-                    patches.append(patch.transpose(2, 0, 1).astype(np.float32)) # o SAM só recebe (C H W)
-                else:
-                    patches.append(patch.astype(np.int64))
-        return np.array(patches)
-    
-    # funcao utils
-    def generate_facies_probability_channel(self, patch, facies_probabilities):
-        prob_map = np.random.choice(
-            len(facies_probabilities), size=patch.shape, p=facies_probabilities
-            )
-        return prob_map
-
-    # funcao util
-    def generate_amplitude_gradient_channel(self, patch):
-        # Usa gradiente de amplitude com suavização
-        gradient_channel = gaussian_gradient_magnitude(patch, sigma=1)
-        return gradient_channel / np.max(gradient_channel)  # Normalização
-
-    # funcao util
-    def generate_curvature_channel(self, patch):
-        # Calcula a curvatura usando o filtro de Laplace
-        curvature_channel = laplace(patch)
-        return curvature_channel / np.max(np.abs(curvature_channel))  # Normaliza para [-1, 1]
-
-    # função útil
-    def generate_image_with_depth(self, normalized_images):
-        two_channel_images = []
-        for img in normalized_images:  # Garantir que está trabalhando com imagens normalizadas
-            depth_channel = self.generate_depth_channel(img.shape[:2])  # Gerar canal de profundidade para esta imagem
-
-            if img.shape[-1] > 1:  # Se a imagem tiver múltiplos canais
-                # Escolher apenas o primeiro canal (exemplo, pode ser qualquer canal)
-                img = img[:, :, 0:1]  # Seleciona o primeiro canal e mantém as dimensões (H, W, 1)
-            
-            # gerando canal 3 (teste)
-            # facies_probabilities = np.array([0.2857, 0.1207, 0.4696, 0.0747, 0.0361, 0.0132])
-            # canal_3 = self.generate_facies_probability_channel(img, facies_probabilities)
-            # canal_3 = self.generate_amplitude_gradient_channel(img)
-            # canal_3 = self.generate_curvature_channel(img)
-
-            # Concatenar o primeiro canal com o depth_channel
-            depth_channel = np.expand_dims(depth_channel, axis=-1)  # Tornar (H, W, 1)
-            two_channel_image = np.concatenate((img, depth_channel), axis=-1)  # Concatenar ao longo do eixo dos canais
-            two_channel_images.append(two_channel_image)  # Adicionar ao array final
-        return two_channel_images
-    
-    # função util
-    def horizontal_flip(self, image, label):
-        if not isinstance(image, np.ndarray):
-            raise ValueError(f"Experado image com type <class 'numpy.ndarray'>, mas foi recebido {type(image)}")
-        if not isinstance(label, np.ndarray):
-            raise ValueError(f"Experado label com type <class 'numpy.ndarray'>, mas foi recebido {type(label)}")
-
-        if image.shape[0] != 3 or image.shape[1] != self.patch_size or image.shape[2] != self.patch_size:
-            raise ValueError(f"Experado image com shape (C=3 H=patch_size W=patch_size), mas foi recebido {image.shape}")
-        if label.shape[0] != self.patch_size or label.shape[1] != self.patch_size:
-            raise ValueError(f"Experado label com shape (H=patch_size W=patch_size), mas foi recebido {label.shape}")
-
-        image_flipped = np.flip(image, axis=2)
-        label_flipped = np.flip(label, axis=1)
-
-        # if any(s < 0 for s in image_flipped.strides):
-        #     print(f"array com strides negativos detectado")
-
-        return image_flipped.copy(), label_flipped.copy()
     
     def setup(self, stage=None):
         if stage == "fit":
@@ -380,87 +380,39 @@ class PatchingTolstayaModule(L.LightningDataModule):
                 train_img_reader = [train_img_reader[i] for i in indices]
                 train_label_reader = [train_label_reader[i] for i in indices]
             
-            # Gerar imagens com canais de profundidade
-            # train_img_reader = self.generate_image_with_depth(train_img_reader)
-            
-            # Gerar patches em batches
-            patches_img_generator = []
-            for image in train_img_reader:
-                patches_img_generator.extend(self.extract_patches(image, self.patch_size, self.stride))
-            patches_label_generator = []
-            for image in train_label_reader:
-                patches_label_generator.extend(self.extract_patches(image, self.patch_size, self.stride, img_type='label'))
-
-            # """ augmentation """
-            # # Aplicar augmentações nas imagens e labels, somente para as amostras com 3, 4 ou 6 classes
-            # augmented_img_generator = []
-            # augmented_label_generator = []
-            # for img, label in zip(patches_img_generator, patches_label_generator):
-            #     # TODO tá estourando nessa parte
-            #     augmented_img_generator.append(img)
-            #     augmented_label_generator.append(label)
-            #     # Verificar o número de classes na amostra
-            #     unique_classes = np.unique(label)
-            #     num_classes = len(unique_classes)
-                
-            #     if num_classes in [3, 4, 6]:  # Apenas aplicar augmentação nas amostras com 3, 4 ou 6 classes
-            #         img_horizontal_flip, label_horizontal_flip = self.horizontal_flip(img, label)
-            #         augmented_img_generator.append(img_horizontal_flip)
-            #         augmented_label_generator.append(label_horizontal_flip)
-            
             # Criar dataset para treinamento
-            self.datasets["train"] = SupervisedReconstructionDataset(
-                readers=[patches_img_generator, patches_label_generator],
+            self.datasets['train'] = SupervisedDatasetPatches(
+                readers=[train_img_reader, train_label_reader],
                 transforms=self.transforms,
+                patch_size=self.patch_size,
+                stride=self.stride
             )
             del train_img_reader, train_label_reader
-            del patches_img_generator, patches_label_generator
-            # del augmented_img_generator, augmented_label_generator
             gc.collect()
 
             val_img_reader = [self.normalize_data(image) for image in TiffReader(self.train_path / "val")]
             val_label_reader = PNGReader(self.annotations_path / "val")
 
-            # gerar imagens com canais de profundidade
-            # val_img_reader = self.generate_image_with_depth(val_img_reader)
-
-            # Gerar patches em batches
-            patches_img_generator = []
-            for image in val_img_reader:
-                patches_img_generator.extend(self.extract_patches(image, self.patch_size, self.stride))
-            patches_label_generator = []
-            for image in val_label_reader:
-                patches_label_generator.extend(self.extract_patches(image, self.patch_size, self.stride, img_type='label'))
-
-            self.datasets["val"] = SupervisedReconstructionDataset(
-                readers=[patches_img_generator, patches_label_generator],
+            self.datasets["val"] = SupervisedDatasetPatches(
+                readers=[val_img_reader, val_label_reader],
                 transforms=self.transforms,
+                patch_size=self.patch_size,
+                stride=self.stride
             )
             del val_img_reader, val_label_reader
-            del patches_img_generator, patches_label_generator
             gc.collect()
         
         elif stage == "test" or stage == "predict":
             test_img_reader = [self.normalize_data(image) for image in TiffReader(self.train_path / "test")]
             test_label_reader = PNGReader(self.annotations_path / "test")
 
-            # gerar imagens com canais de profundidade
-            # test_img_reader = self.generate_image_with_depth(test_img_reader)
-
-            # Gerar patches em batches
-            patches_img_generator = []
-            for image in test_img_reader:
-                patches_img_generator.extend(self.extract_patches(image, self.patch_size, self.stride))
-            patches_label_generator = []
-            for image in test_label_reader:
-                patches_label_generator.extend(self.extract_patches(image, self.patch_size, self.stride, img_type='label'))
-
-            test_dataset = SupervisedReconstructionDataset(
-                readers=[patches_img_generator, patches_label_generator],
+            test_dataset = SupervisedDatasetPatches(
+                readers=[test_img_reader, test_label_reader],
                 transforms=self.transforms,
+                patch_size=self.patch_size,
+                stride=self.stride
             )
             del test_img_reader, test_label_reader
-            del patches_img_generator, patches_label_generator
             gc.collect()
 
             self.datasets["test"] = test_dataset
@@ -508,9 +460,6 @@ class PatchingTolstayaModule(L.LightningDataModule):
             pin_memory=True, 
             drop_last=False
         )
-
-    def worker_init_fn(self, worker_id):
-        random.seed(18 + worker_id)
 
 if __name__ == "__main__":
     print("___START EXPERIMENT___")
