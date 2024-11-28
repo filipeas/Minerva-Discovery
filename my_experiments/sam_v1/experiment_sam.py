@@ -91,7 +91,7 @@ def _init_experiment(
 
             log_memory() # verificando consumo
             
-            train_metrics, val_metrics, test_metrics = train_and_evaluate(image_size, model, ratio, epochs, batch_size=batch_size, train_path=train_path, annotation_path=annotation_path)
+            train_metrics, val_metrics, test_metrics = train_and_evaluate(name, image_size, model, ratio, epochs, batch_size=batch_size, train_path=train_path, annotation_path=annotation_path)
             # Armazene os resultados para cada experimento
             results[ratio]['train_metrics'].append(train_metrics)
             results[ratio]['val_metrics'].append(val_metrics)
@@ -183,6 +183,7 @@ def _init_experiment(
 
 # Função para treinar e testar o modelo
 def train_and_evaluate(
+        name,
         image_size,
         model, 
         ratio, 
@@ -202,13 +203,12 @@ def train_and_evaluate(
         ratio=ratio,
     )
 
-
     # Define o callback para salvar o modelo com base no menor valor da métrica de validação
     current_date = datetime.now().strftime("%Y-%m-%d")
     checkpoint_callback = ModelCheckpoint(
         monitor="val_loss", # Métrica para monitorar
         dirpath="./checkpoints", # Diretório onde os checkpoints serão salvos
-        filename=f"final_train-raio-{ratio}-{current_date}-{{epoch:02d}}-{{val_loss:.2f}}", # Nome do arquivo do checkpoint
+        filename=f"{name}_final_train-ratio-{ratio}-{current_date}-{{epoch:02d}}-{{val_loss:.2f}}", # Nome do arquivo do checkpoint
         save_top_k=1, # Quantos melhores checkpoints salvar (no caso, o melhor)
         mode="min", # Como a métrica deve ser tratada (no caso, 'min' significa que menor valor de val_loss é melhor)
     )
