@@ -47,6 +47,7 @@ def log_memory():
         print("No GPU available.")
 
 def _init_experiment(
+        vit_model,
         checkpoint_path,
         train_path,
         annotation_path,
@@ -84,7 +85,8 @@ def _init_experiment(
                 num_classes=num_classes,
                 alpha=alpha,
                 rank=rank,
-                checkpoint=checkpoint_path
+                checkpoint=checkpoint_path,
+                vit_model=vit_model
             )
 
             log_memory() # verificando consumo
@@ -484,6 +486,7 @@ if __name__ == "__main__":
     n = config["n"]
     epochs = config["epochs"]
     data_ratios = config["data_ratios"]
+    vit_model = config["vit_model"]
     checkpoint_sam = config["checkpoint_sam"]
     train_path = config["train_path"]
     annotation_path = config["annotation_path"]
@@ -506,6 +509,7 @@ if __name__ == "__main__":
     print(f"{'n':<20} {n}")
     print(f"{'epochs':<20} {epochs}")
     print(f"{'data_ratios':<20} {data_ratios}")
+    print(f"{'vit_model':<20} {vit_model}")
     print(f"{'checkpoint_sam':<20} {checkpoint_sam}")
     print(f"{'train_path':<20} {train_path}")
     print(f"{'annotation_path':<20} {annotation_path}")
@@ -521,6 +525,7 @@ if __name__ == "__main__":
         N=n, 
         epochs=epochs, 
         data_ratios=data_ratios,
+        vit_model=vit_model,
         checkpoint_path=checkpoint_sam,
         train_path=train_path,
         annotation_path=annotation_path,
