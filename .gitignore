@@ -18,3 +18,5 @@ results
 !experiment_*.py
 
 Singularity.sif
+
+bkp
