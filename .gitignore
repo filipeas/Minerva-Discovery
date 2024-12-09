@@ -10,6 +10,7 @@ lightning_logs
 logs
 checkpoints
 __pycache__
+run_*.yaml
 
 # ignorar pastas de resultados
 experiment_*
