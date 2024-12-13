@@ -12,6 +12,8 @@
 - Run ``` ./setup_and_run.sh ``` if you run outside of container.
 - Run ``` ./setup_and_run.sh --container ``` if you run outside of container.
 
+## Open port forward (only server)
+``` python -m http.server 8000 ```
 
 ## How execute into Ogbon (Petrobras)
 1) Read this README.md file first!
