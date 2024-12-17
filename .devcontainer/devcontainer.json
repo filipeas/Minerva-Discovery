@@ -19,6 +19,8 @@
     ],
     "postStartCommand": ".devcontainer/post_start.sh",
     "runArgs": [
+        "--network",
+        "host",
         "--gpus",
         "all",
         "--shm-size",

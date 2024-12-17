@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from tqdm import tqdm
 import pandas as pd
-from minerva.models.adapters.simple_lora import LoRALinear
+from minerva.models.finetune_adapters import LoRA
 from minerva.models.nets.image.sam import Sam
 from minerva.pipelines.lightning_pipeline import SimpleLightningPipeline
 import lightning as L
