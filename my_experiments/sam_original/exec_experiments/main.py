@@ -70,13 +70,13 @@ def _init_experiment(
                     if image_encoder_method == "fine_tuning":
                         apply_freeze["image_encoder"] = False  # Descongela para fine-tuning
                     elif image_encoder_method == "adapter":
-                        apply_adapter["image_encoder"] = LoRALinear
+                        apply_adapter["image_encoder"] = LoRA
                     
                     # Configurar o mask_decoder conforme o método interno
                     if mask_decoder_method == "fine_tuning":
                         apply_freeze["mask_decoder"] = False  # Descongela para fine-tuning
                     elif mask_decoder_method == "adapter":
-                        apply_adapter["mask_decoder"] = LoRALinear
+                        apply_adapter["mask_decoder"] = LoRA
                     
                     """ starting training """
                     val_loss_epoch, train_loss_epoch, test_loss_epoch, val_mIoU, train_mIoU, test_mIoU = execute_train(height_image, width_image, ratio, alpha, rank, train_path, annotation_path, multimask_output, batch_size, vit_model, checkpoint_path, num_classes, apply_freeze, apply_adapter, epochs)
