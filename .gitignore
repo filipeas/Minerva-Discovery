@@ -12,6 +12,7 @@ checkpoints
 __pycache__
 run_*.yaml
 *.csv
+*.ckpt
 
 # ignorar pastas de resultados
 experiment_*
