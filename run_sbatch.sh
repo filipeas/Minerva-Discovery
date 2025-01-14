@@ -4,7 +4,6 @@
 #SBATCH --job-name=sam_FAS         # Nome do job
 #SBATCH --time=220:00:00           # Tempo máximo para o job (em horas)
 #SBATCH --mem=200G                 # Quantidade mínima de RAM
-#SBATCH --constraint=gpumem48      # Garantir GPU com no mínimo 48 GB de VRAM
 
 # Exibe informações do job para facilitar o debug
 echo "Job ID: $SLURM_JOB_ID"
