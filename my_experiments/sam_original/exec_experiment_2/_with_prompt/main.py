@@ -114,8 +114,7 @@ def execute_train(
     trainer = L.Trainer(
         max_epochs=epochs,
         accelerator="gpu",
-        devices=2,  # Usar 2 GPUs
-        strategy="ddp",  # Estratégia de paralelismo (Distributed Data Parallel)
+        devices=1,
         logger=False,
         enable_checkpointing=False
     )

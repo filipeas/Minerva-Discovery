@@ -3,7 +3,7 @@
     "height_image": 1006,
     "width_image": 590,
     "num_classes": 3,
-    "batch_size": 4,
+    "batch_size": 1,
     "alpha": 1,
     "rank": 4,
     "num_points": 3,
