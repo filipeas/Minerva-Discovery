@@ -11,5 +11,4 @@ echo "Running on node: $(hostname)"
 echo "Allocated GPU(s): $CUDA_VISIBLE_DEVICES"
 
 # Executa o container Singularity com suporte a GPU e roda o script de setup
-singularity exec --nv Singularity.sif \ 
-    python my_experiments/sam_original/exec_experiment_2/_with_prompt/main.py --config config_experiment_parihaka_ogbon.json
+singularity exec --nv Singularity.sif python my_experiments/sam_original/exec_experiment_2/_with_prompt/main.py --config config_experiment_parihaka_ogbon.json
