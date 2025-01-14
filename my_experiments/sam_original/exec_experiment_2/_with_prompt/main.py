@@ -153,7 +153,7 @@ if __name__ == "__main__":
     # Inicializa o analisador de argumentos
     parser = argparse.ArgumentParser(description="Script for experiments with SAM")
     parser.add_argument('--config', type=str, help="Path to file with configurations - file need to be JSON type", required=True)
-    parser.add_argument('--device', type=int, help="GPU device ID to use (default: 0)", default=0)
+    # parser.add_argument('--device', type=int, help="GPU device ID to use (default: 0)", default=0)
     args = parser.parse_args()
 
     # Carregar configurações do JSON
@@ -161,8 +161,8 @@ if __name__ == "__main__":
         config = json.load(f)
     
     # configura qual device usar
-    if args.device != 0:
-        set_device(args.device)
+    # if args.device != 0:
+    #     set_device(args.device)
 
     # Extrair os parâmetros do JSON
     name = config["name"]
