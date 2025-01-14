@@ -2,7 +2,7 @@
 #SBATCH --partition=gpulongd       # Nome da partição que você vai usar
 #SBATCH --account=asml-gpu         # Conta associada
 #SBATCH --job-name=sam_FAS         # Nome do job
-#SBATCH --time=220:00:00           # Tempo máximo para o job (em horas)
+#SBATCH --time=520:00:00           # Tempo máximo para o job (em horas)
 
 # Exibe informações do job para facilitar o debug
 echo "Job ID: $SLURM_JOB_ID"
