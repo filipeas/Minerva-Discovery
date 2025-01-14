@@ -161,7 +161,8 @@ if __name__ == "__main__":
         config = json.load(f)
     
     # configura qual device usar
-    set_device(args.device)
+    if args.device != 0:
+        set_device(args.device)
 
     # Extrair os parâmetros do JSON
     name = config["name"]
