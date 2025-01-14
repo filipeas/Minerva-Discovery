@@ -11,6 +11,18 @@ from datetime import datetime
 from data_module import DataModule, Padding
 from tqdm import tqdm
 from minerva.pipelines.lightning_pipeline import SimpleLightningPipeline
+import torch
+
+def set_device(device_id=None):
+    """Set the device to use for computation."""
+    if torch.cuda.is_available():
+        if device_id is not None and 0 <= device_id < torch.cuda.device_count():
+            torch.cuda.set_device(device_id)
+            print(f"Using GPU: {device_id} - {torch.cuda.get_device_name(device_id)}")
+        else:
+            print("GPU device ID not specified or invalid. Using default GPU (0).")
+    else:
+        print("No GPU available. Using CPU.")
 
 def _init_experiment(
         name,
@@ -141,13 +153,16 @@ if __name__ == "__main__":
     # Inicializa o analisador de argumentos
     parser = argparse.ArgumentParser(description="Script for experiments with SAM")
     parser.add_argument('--config', type=str, help="Path to file with configurations - file need to be JSON type", required=True)
-    
+    parser.add_argument('--device', type=int, help="GPU device ID to use (default: 0)", default=0)
     args = parser.parse_args()
 
     # Carregar configurações do JSON
     with open(args.config, 'r') as f:
         config = json.load(f)
     
+    # configura qual device usar
+    set_device(args.device)
+
     # Extrair os parâmetros do JSON
     name = config["name"]
     num_classes = config["num_classes"]
@@ -189,6 +204,9 @@ if __name__ == "__main__":
     print(f"{'train_path':<20} {train_path}")
     print(f"{'annotation_path':<20} {annotation_path}")
     print(20*'-')
+    print(f"GPUs disponíveis: {torch.cuda.device_count()}")
+    print(f"Usando GPU: {torch.cuda.current_device()} - {torch.cuda.get_device_name(torch.cuda.current_device())}")
+
 
     _init_experiment(
         name=name,

@@ -1,0 +1,17 @@
+{
+    "name": "experiment-parihaka",
+    "height_image": 1006,
+    "width_image": 590,
+    "num_classes": 3,
+    "batch_size": 2,
+    "alpha": 1,
+    "rank": 4,
+    "num_points": 3,
+    "n": 5,
+    "epochs": 100,
+    "data_ratios": [0.01, 1.0],
+    "vit_model": "vit-b",
+    "checkpoint_sam": "/workspaces/Minerva-Discovery/shared_data/weights_sam/checkpoints_sam/sam_vit_b_01ec64.pth",
+    "train_path": "/workspaces/Minerva-Discovery/shared_data/seam_ai_datasets/seam_ai/images",
+    "annotation_path": "/workspaces/Minerva-Discovery/shared_data/seam_ai_datasets/seam_ai/annotations"
+}
