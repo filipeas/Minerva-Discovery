@@ -1,8 +1,11 @@
 #!/bin/bash
-#SBATCH --partition=gpulongd       # Nome da partição que você vai usar (ex: gpulongd)
+#SBATCH --partition=gpulongd       # Nome da partição que você vai usar
 #SBATCH --account=asml-gpu         # Conta associada
-#SBATCH --job-name=sam_FAS  # Nome do job
+#SBATCH --job-name=sam_FAS         # Nome do job
 #SBATCH --time=220:00:00           # Tempo máximo para o job (em horas)
+#SBATCH --mem=200G                 # Quantidade mínima de RAM
+#SBATCH --gres=gpu:1               # Requisitar 1 GPU
+#SBATCH --constraint=gpumem48      # Garantir GPU com no mínimo 48 GB de VRAM
 
 # Exibe informações do job para facilitar o debug
 echo "Job ID: $SLURM_JOB_ID"
