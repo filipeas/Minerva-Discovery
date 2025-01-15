@@ -15,6 +15,7 @@ from minerva.pipelines.lightning_pipeline import SimpleLightningPipeline
 def _init_experiment(
         name,
         num_classes,
+        num_facies,
         batch_size,
         alpha,
         rank,
@@ -40,7 +41,7 @@ def _init_experiment(
     for ratio in data_ratios:
         print(f"Executing experiments with {int(ratio * 100)}% of data...")
         for experiment_num in tqdm(range(N)):
-            for facie in range(num_classes): # noop in facies
+            for facie in range(num_facies): # noop in facies
                 """ starting training """
                 val_loss_epoch, train_loss_epoch, test_loss_epoch, val_mIoU, train_mIoU, test_mIoU = execute_train(
                     height_image=height_image, 
@@ -151,6 +152,7 @@ if __name__ == "__main__":
     # Extrair os parâmetros do JSON
     name = config["name"]
     num_classes = config["num_classes"]
+    num_facies = config["num_facies"]
     batch_size = config["batch_size"]
     alpha = config["alpha"]
     rank = config["rank"]
@@ -174,6 +176,7 @@ if __name__ == "__main__":
     print("-" * 40)
     print(f"{'name':<20} {name}")
     print(f"{'num_classes':<20} {num_classes}")
+    print(f"{'num_facies':<20} {num_facies}")
     print(f"{'batch_size':<20} {batch_size}")
     print(f"{'alpha':<20} {alpha}")
     print(f"{'rank':<20} {rank}")
@@ -191,6 +194,7 @@ if __name__ == "__main__":
     _init_experiment(
         name=name,
         num_classes=num_classes,
+        num_facies=num_facies,
         batch_size=batch_size,
         alpha=alpha,
         rank=rank,

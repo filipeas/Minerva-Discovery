@@ -3,6 +3,7 @@
     "height_image": 255,
     "width_image": 701,
     "num_classes": 3,
+    "num_facies": 6,
     "batch_size": 1,
     "alpha": 1,
     "rank": 4,
