@@ -17,6 +17,7 @@ run_*.yaml
 # ignorar pastas de resultados
 experiment_*
 results
+results_with_prompt
 
 # nao ignorar arquivos de experimento py
 !experiment_*.py
