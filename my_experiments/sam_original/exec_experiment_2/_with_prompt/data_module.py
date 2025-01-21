@@ -71,8 +71,21 @@ class DatasetForSAM(SimpleDataset):
                 self.samples.append((image, region, point_coords))
 
     def get_points_in_region(self, region, num_points=3):
-        # Obter todas as coordenadas (y, x) da região
-        y_indices, x_indices = np.where(region.squeeze(0) == 1)
+        # # Garantir que a região tem apenas valores 0 e 1
+        # region = (region > 0).astype(np.uint8)
+
+        # Garantir que a matriz tem apenas duas dimensões removendo a dimensão extra
+        if region.ndim == 3 and region.shape[0] == 1:
+            region = region.squeeze(0)  # Remove a primeira dimensão (1, H, W) -> (H, W)
+
+
+        # Verificar se a região contém apenas valores 0 e 1
+        unique_values = np.unique(region)
+        if not np.array_equal(unique_values, [0, 1]) and not np.array_equal(unique_values, [1]) and not np.array_equal(unique_values, [0]):
+            raise ValueError(f"A matriz 'region' contém valores inesperados: {unique_values}. Esperado apenas 0 e 1.")
+
+        # Obter todas as coordenadas (y, x) da região branca
+        y_indices, x_indices = np.where(region == 1)
 
         # Se não houver pontos na região, retornar uma lista vazia
         if len(y_indices) == 0:
@@ -81,25 +94,27 @@ class DatasetForSAM(SimpleDataset):
         # Encontrar o centro vertical de cada coluna
         unique_x = np.unique(x_indices)
         central_y_coords = []
-        
+
         for x in unique_x:
-            # Obter as coordenadas verticais de todos os pontos na mesma coluna
             y_in_column = y_indices[x_indices == x]
-            # Calcular a posição central vertical dessa coluna
-            central_y = np.mean(y_in_column)
-            central_y_coords.append((x, central_y))
 
-        # Ordenar os pontos pela coordenada x para garantir a equidistância no eixo horizontal
-        central_y_coords = sorted(central_y_coords, key=lambda x: x[0])
+            if len(y_in_column) > 0:
+                central_y = y_in_column[len(y_in_column) // 2]  # Pega um ponto real, não a média
+                central_y_coords.append((x, central_y))
 
-        # Selecionar pontos equidistantes no eixo horizontal
-        num_points = min(num_points, len(central_y_coords))  # Ajustar o número de pontos se houver menos pixels na região
+        # Ordenar os pontos pela coordenada x
+        central_y_coords = sorted(central_y_coords, key=lambda coord: coord[0])
+
+        # Selecionar pontos equidistantes
+        num_points = min(num_points, len(central_y_coords))
         indices = np.linspace(0, len(central_y_coords) - 1, num_points, dtype=int)
         
         selected_points = [central_y_coords[i] for i in indices]
-        
-        # Retornar uma lista de tuplas (x, y, valor)
-        return [(int(x), int(y), 1) for x, y in selected_points]
+
+        # Filtrar pontos que realmente pertencem à região branca
+        filtered_points = [(int(x), int(round(y)), 1) for x, y in selected_points if region[int(round(y)), int(x)] == 1]
+
+        return filtered_points
     
     def __len__(self):
         return len(self.samples)
