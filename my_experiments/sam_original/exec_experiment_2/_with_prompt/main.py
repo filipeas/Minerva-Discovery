@@ -11,6 +11,7 @@ from datetime import datetime
 from data_module import DataModule, Padding
 from tqdm import tqdm
 from minerva.pipelines.lightning_pipeline import SimpleLightningPipeline
+from dataset_for_test import AUC_calculate_v1, DataModule_for_AUC
 
 def _init_experiment(
         name,
@@ -55,7 +56,9 @@ def _init_experiment(
                 checkpoint_path=checkpoint_path, 
                 num_classes=num_classes, 
                 epochs=epochs, 
-                num_points=num_points)
+                num_points=num_points,
+                experiment_num=experiment_num,
+                save_dir=save_dir)
 
             log_data.append({
                 "ratio": ratio,
@@ -86,7 +89,9 @@ def execute_train(
         checkpoint_path,
         num_classes,
         epochs,
-        num_points
+        num_points,
+        experiment_num,
+        save_dir
 ):
     data_module = DataModule(
         train_path=train_path,
@@ -131,6 +136,28 @@ def execute_train(
     test = pipeline.run(data=data_module, task="test")
     test_loss = test[0]['test_loss_epoch']
     test_mIoU = test[0]['test_mIoU_epoch']
+
+    # executing test for colect AUC
+    data_module_for_auc = DataModule_for_AUC(
+        train_path=train_path,
+        annotations_path=annotation_path,
+        transforms=Padding(height_image, width_image),
+        batch_size=batch_size
+    )
+
+    data_module_for_auc.setup(stage='test')  # Configura os dados para inferência
+    test_dataloader = data_module_for_auc.test_dataloader()
+
+    algorithm = AUC_calculate_v1(
+        model=model,
+        dataloader=test_dataloader,
+        num_points=10,
+        multimask_output=False,
+        experiment_num=experiment_num,
+        save_dir=save_dir
+    )
+
+    algorithm.process()
 
     return val_loss, train_loss, test_loss, val_mIoU, train_mIoU, test_mIoU
 
