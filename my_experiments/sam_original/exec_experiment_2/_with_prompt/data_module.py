@@ -59,6 +59,9 @@ class DatasetForSAM(SimpleDataset):
                 data_readers.append(sample)
             
             image = data_readers[0]
+            if image.shape[0] == 1:
+                image = image.repeat(3, 1, 1)
+            image = (image * 255).clamp(0, 255).to(torch.uint8)
             label = data_readers[1]
             
             num_facies = np.unique(label)

@@ -191,6 +191,7 @@ class AUC_calculate_v1():
                  experiment_num:int=0,
                  ):
         self.model = model
+        self.model.eval()
         self.dataloader = dataloader
         self.num_points = num_points
         self.save_dir = save_dir
@@ -208,94 +209,94 @@ class AUC_calculate_v1():
     def process(self):
         self.results = pd.DataFrame(columns=['sample_id', 'facie_id', 'accumulated_point', 'iou', 'num_points'])
 
-        # for batch_idx, batch in enumerate(self.dataloader):
-        for batch_idx, batch in enumerate(tqdm(self.dataloader, desc="Processando batches")):
-            for item in batch:
-                img = item['image']
-                if img.shape[0] == 1:
-                    img = img.repeat(3, 1, 1)
-                img = (img * 255).clamp(0, 255).to(torch.uint8)
-                image = img.to(self.model.device)
-                label = item['label'].squeeze(0).numpy()#.to(self.model.device)
-                # plt.figure(figsize=(6, 6))  # Define o tamanho da figura
-                # plt.imshow(label, cmap='gray')  # Mostra a imagem, com escala de cinza (ou RGB se for colorida)
-                # plt.title("label")  # Adiciona o título
-                # plt.axis('off')  # Desliga os eixos para uma visualização limpa
-                # plt.show()
-                # break
-
-                num_facies = np.unique(label) # num de facies da amostra
-                point_type = 'positive' # inicia com ponto positivo, depois pode mudar para 'negative'
-
-                for i, facie in enumerate(num_facies):
-                    region = np.zeros_like(label, dtype=np.uint8) # [H,W]
-                    region[label == facie] = 1
-                    real_label = region
+        with torch.no_grad():
+            for batch_idx, batch in enumerate(tqdm(self.dataloader, desc="Processando batches")):
+                for item in batch:
+                    img = item['image']
+                    if img.shape[0] == 1:
+                        img = img.repeat(3, 1, 1)
+                    img = (img * 255).clamp(0, 255).to(torch.uint8)
+                    image = img.to(self.model.device)
+                    label = item['label'].squeeze(0).numpy()#.to(self.model.device)
                     # plt.figure(figsize=(6, 6))  # Define o tamanho da figura
-                    # plt.imshow(region, cmap='gray')  # Mostra a imagem, com escala de cinza (ou RGB se for colorida)
-                    # plt.title("region")  # Adiciona o título
+                    # plt.imshow(label, cmap='gray')  # Mostra a imagem, com escala de cinza (ou RGB se for colorida)
+                    # plt.title("label")  # Adiciona o título
                     # plt.axis('off')  # Desliga os eixos para uma visualização limpa
                     # plt.show()
                     # break
 
-                    for point in range(self.num_points):
-                        # calculando centro da regiao e retornando sua coordenada
-                        point_coords, point_labels = self.calculate_center_region(region=region, point_type=point_type)
-                    
-                        # definindo amostra (batch) a ser inserido no modelo
-                        batch = {
-                            'image': image,
-                            'label': label,
-                            'original_size': (int(image.shape[1]), int(image.shape[2])),
-                            'point_coords': torch.tensor(point_coords, dtype=torch.long).unsqueeze(0),
-                            'point_labels': torch.tensor(point_labels, dtype=torch.long).unsqueeze(0)
-                        }
-                    
-                        # Inferência
-                        outputs = self.model([batch], multimask_output=self.multimask_output) # batch tem que ser uma lista de dict. multimask_output é dado no init do model
-                    
-                        # calcular IoU
-                        gt_tensor = torch.tensor(real_label).to(self.model.device)  # Converta para tensor 2D e mova para GPU
-                        pred_tensor = torch.tensor(outputs[0]['masks'].squeeze()).to(self.model.device)  # Remover a dimensão extra e mover para GPU
+                    num_facies = np.unique(label) # num de facies da amostra
+                    point_type = 'positive' # inicia com ponto positivo, depois pode mudar para 'negative'
+
+                    for i, facie in enumerate(num_facies):
+                        region = np.zeros_like(label, dtype=np.uint8) # [H,W]
+                        region[label == facie] = 1
+                        real_label = region
+                        # plt.figure(figsize=(6, 6))  # Define o tamanho da figura
+                        # plt.imshow(region, cmap='gray')  # Mostra a imagem, com escala de cinza (ou RGB se for colorida)
+                        # plt.title("region")  # Adiciona o título
+                        # plt.axis('off')  # Desliga os eixos para uma visualização limpa
+                        # plt.show()
+                        # break
+
+                        for point in range(self.num_points):
+                            # calculando centro da regiao e retornando sua coordenada
+                            point_coords, point_labels = self.calculate_center_region(region=region, point_type=point_type)
                         
-                        iou_score = self.miou_metric(pred_tensor, gt_tensor)
+                            # definindo amostra (batch) a ser inserido no modelo
+                            batch = {
+                                'image': image,
+                                'label': label,
+                                'original_size': (int(image.shape[1]), int(image.shape[2])),
+                                'point_coords': torch.tensor(point_coords, dtype=torch.long).unsqueeze(0),
+                                'point_labels': torch.tensor(point_labels, dtype=torch.long).unsqueeze(0)
+                            }
+                        
+                            # Inferência
+                            outputs = self.model([batch], multimask_output=self.multimask_output) # batch tem que ser uma lista de dict. multimask_output é dado no init do model
+                        
+                            # calcular IoU
+                            gt_tensor = torch.tensor(real_label).to(self.model.device)  # Converta para tensor 2D e mova para GPU
+                            pred_tensor = torch.tensor(outputs[0]['masks'].squeeze()).to(self.model.device)  # Remover a dimensão extra e mover para GPU
+                            
+                            iou_score = self.miou_metric(pred_tensor, gt_tensor)
 
-                        # print("real_label shape: ", real_label.shape)
-                        # print('pred shape: ', outputs[0]['masks'].squeeze().numpy().shape)
-                        diff, new_point_type = self.calculate_diff_label_pred(label=real_label, pred=outputs[0]['masks'].squeeze().numpy())
-                    
-                        # salvando progresso
-                        new_row = pd.DataFrame([{
-                            'sample_id': batch_idx,
-                            'facie_id': facie,
-                            'accumulated_point': point + 1,
-                            'iou': iou_score.item(),
-                            'num_points': self.num_points
-                        }])
+                            # print("real_label shape: ", real_label.shape)
+                            # print('pred shape: ', outputs[0]['masks'].squeeze().numpy().shape)
+                            diff, new_point_type = self.calculate_diff_label_pred(label=real_label, pred=outputs[0]['masks'].squeeze().numpy())
+                        
+                            # salvando progresso
+                            new_row = pd.DataFrame([{
+                                'sample_id': batch_idx,
+                                'facie_id': facie,
+                                'accumulated_point': point + 1,
+                                'iou': iou_score.item(),
+                                'num_points': self.num_points
+                            }])
 
-                        self.results = pd.concat([self.results, new_row], ignore_index=True)
-                    
-                        # plot experimental a cada 50 amostras
-                        # if idx % 50 == 0:
-                        # plot_all(
-                        #     image=image.permute(1, 2, 0),
-                        #     label=real_label,
-                        #     pred=outputs[0]['masks'].squeeze().numpy(),
-                        #     diff=diff,
-                        #     score=iou_score,
-                        #     point_coords=self.accumulated_coords,
-                        #     point_labels=self.accumulated_labels
-                        # )
-                        region = diff # [H,W], atualiza para a proxima regiao
-                        point_type = new_point_type # 'positive' ou 'negative', atualiza para a proxima regiao
-                        # break # testa só 1 ponto
-                    point_type = 'positive' # reinicia tipo do primeiro ponto (sempre deve ser positivo o primeiro)
-                    self.set_points() # reinicia empilhamento de pontos
-                    # break # testa só 1 facie
+                            self.results = pd.concat([self.results, new_row], ignore_index=True)
+                        
+                            # plot experimental a cada 50 amostras
+                            # if idx % 50 == 0:
+                            # plot_all(
+                            #     image=image.permute(1, 2, 0),
+                            #     label=real_label,
+                            #     pred=outputs[0]['masks'].squeeze().numpy(),
+                            #     diff=diff,
+                            #     score=iou_score,
+                            #     point_coords=self.accumulated_coords,
+                            #     point_labels=self.accumulated_labels
+                            # )
+                            region = diff # [H,W], atualiza para a proxima regiao
+                            point_type = new_point_type # 'positive' ou 'negative', atualiza para a proxima regiao
+                            # break # testa só 1 ponto
+                        point_type = 'positive' # reinicia tipo do primeiro ponto (sempre deve ser positivo o primeiro)
+                        self.set_points() # reinicia empilhamento de pontos
+                        # break # testa só 1 facie
+                    # break # testar só uma amostra
                 # break # testar só uma amostra
-            # break # testar só uma amostra
-        
-        self.results.to_csv(f'{self.save_dir}/iou_results_{self.experiment_num}.csv', index=False)
+            
+            self.results.to_csv(f'{self.save_dir}/iou_results_{self.experiment_num}.csv', index=False)
 
     def calculate_center_region(self, region: np.array, point_type: str, min_distance: int = 10):
         """

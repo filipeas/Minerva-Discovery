@@ -12,6 +12,7 @@ from data_module import DataModule, Padding
 from tqdm import tqdm
 from minerva.pipelines.lightning_pipeline import SimpleLightningPipeline
 from dataset_for_test import AUC_calculate_v1, DataModule_for_AUC
+import torch
 
 def _init_experiment(
         name,
@@ -148,6 +149,17 @@ def execute_train(
     data_module_for_auc.setup(stage='test')  # Configura os dados para inferência
     test_dataloader = data_module_for_auc.test_dataloader()
 
+    if torch.cuda.is_available():
+        device = "cuda"
+    elif torch.backends.mps.is_available():
+        device = "mps"
+    else:
+        device = "cpu"
+    print("Using device: ", device)
+
+    model.to(device)
+    model.eval()
+    
     algorithm = AUC_calculate_v1(
         model=model,
         dataloader=test_dataloader,
