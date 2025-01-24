@@ -10,9 +10,10 @@ from minerva.models.finetune_adapters import LoRA
 from minerva.models.nets.image.sam import Sam
 from minerva.pipelines.lightning_pipeline import SimpleLightningPipeline
 import lightning as L
-from lightning.pytorch.callbacks import ModelCheckpoint
-from lightning.pytorch.loggers import CSVLogger
-from data_module import DataModule, Transpose, Padding
+from data_module import DataModule, Padding
+from torchmetrics import JaccardIndex
+from dataset_for_test import AUC_calculate_v1, DataModule_for_AUC
+import torch
 
 def _init_experiment(
         name,
@@ -57,7 +58,7 @@ def _init_experiment(
 
                 print(f"   >> Método no Mask Decoder: {mask_decoder_method}")
 
-                for _ in tqdm(range(N), desc=f"Image: {image_encoder_method}, Mask: {mask_decoder_method}"):
+                for experiment_num in tqdm(range(N), desc=f"Image: {image_encoder_method}, Mask: {mask_decoder_method}"):
                     # Inicializar dicionários de configuração
                     apply_freeze = {
                         aways_freeze_this_component: True, # Sempre congelar prompt_encoder
@@ -79,7 +80,7 @@ def _init_experiment(
                         apply_adapter["mask_decoder"] = LoRA
                     
                     """ starting training """
-                    val_loss_epoch, train_loss_epoch, test_loss_epoch, val_mIoU, train_mIoU, test_mIoU = execute_train(height_image, width_image, ratio, alpha, rank, train_path, annotation_path, multimask_output, batch_size, vit_model, checkpoint_path, num_classes, apply_freeze, apply_adapter, epochs)
+                    val_loss_epoch, train_loss_epoch, test_loss_epoch, val_mIoU, train_mIoU, test_mIoU = execute_train(height_image, width_image, ratio, alpha, rank, train_path, annotation_path, multimask_output, batch_size, vit_model, checkpoint_path, num_classes, apply_freeze, apply_adapter, epochs, experiment_num, save_dir)
 
                     log_data.append({
                         "ratio": ratio,
@@ -111,45 +112,18 @@ def execute_train(
         num_classes,
         apply_freeze,
         apply_adapter,
-        epochs
+        epochs,
+        experiment_num, 
+        save_dir
 ):
     data_module = DataModule(
         train_path=train_path,
         annotations_path=annotation_path,
         transforms=Padding(height_image, width_image),
-        # transform_coords_input={'point_coords': None, 'point_labels': None},
         multimask_output=multimask_output,
         batch_size=batch_size,
         data_ratio=ratio
     )
-
-    # debug
-    # def get_train_dataloader(data_module):
-    #     data_module.setup("fit")
-    #     return data_module.train_dataloader()
-
-    # print("Total batches: ", len(get_train_dataloader(data_module)))
-
-    # train_batch = next(iter(get_train_dataloader(data_module)))
-    # print(f"Train batch image (X) shape: {train_batch[0]['image'].shape}")
-    # print(f"Train batch label (Y) shape: {train_batch[0]['label'].shape}")
-    # print(f"Train batch label (original_size) shape: {train_batch[0]['original_size']}")
-    # print(f"multimask_output: {train_batch[0]['multimask_output']}")
-
-    # for idx, batch in enumerate(get_train_dataloader(data_module)):
-    #     print(f"Batch {idx}:")
-    #     print(f"Tipo do batch: {type(batch)}")
-    #     print(f"Tamanho do batch: {len(batch)}")  # Deve ser igual ao batch_size
-    #     print("Estrutura do primeiro item do batch:")
-    #     # print(batch[0])  # Exibe o primeiro dicionário do batch
-    #     print(f"Shape da imagem no primeiro item: {batch[0]['image'].shape}")
-    #     print(20*'-')
-    #     print(f"Train batch image (X) shape: {batch[0]['image'].shape}")
-    #     print(f"Train batch label (Y) shape: {batch[0]['label'].shape}")
-    #     print(f"Train batch label (original_size) shape: {batch[0]['original_size']}")
-    #     print(f"multimask_output: {batch[0]['multimask_output']}")
-    #     break  # Para após o primeiro batch
-    # print(f"O Batch (de tamanho {len(train_batch)}) possui: {train_batch[0]['image'].shape[0]} canais, {train_batch[0]['image'].shape[1]} altura e {train_batch[0]['image'].shape[2]} largura.")
 
     model = Sam(
         vit_type=vit_model,
@@ -160,16 +134,10 @@ def execute_train(
         apply_adapter=apply_adapter,
         lora_rank=rank,
         lora_alpha=alpha,
+        train_metrics={"mIoU": JaccardIndex(task="multiclass", num_classes=num_classes)},
+        val_metrics={"mIoU": JaccardIndex(task="multiclass", num_classes=num_classes)},
+        test_metrics={"mIoU": JaccardIndex(task="multiclass", num_classes=num_classes)}
     )
-
-    # current_date = datetime.now().strftime("%Y-%m-%d")
-    # checkpoint_callback = ModelCheckpoint(
-    #     monitor="val_loss",
-    #     dirpath="./checkpoints",
-    #     filename=f"sam-{current_date}-{{epoch:02d}}-{{val_loss:.2f}}",
-    #     save_top_k=1,
-    #     mode="min",
-    # )
     
     trainer = L.Trainer(
         max_epochs=epochs,
@@ -177,7 +145,6 @@ def execute_train(
         devices=1,
         logger=False,
         enable_checkpointing=False
-        # callbacks=[checkpoint_callback],
     )
 
     # pipeline
@@ -190,8 +157,41 @@ def execute_train(
     train_mIoU = trainer.callback_metrics['train_mIoU']
     
     test = pipeline.run(data=data_module, task="test")
-    test_loss = test[0]['test_loss']
-    test_mIoU = test[0]['test_mIoU']
+    test_loss = test[0]['test_loss_epoch']
+    test_mIoU = test[0]['test_mIoU_epoch']
+
+    # executing test for colect AUC
+    data_module_for_auc = DataModule_for_AUC(
+        train_path=train_path,
+        annotations_path=annotation_path,
+        transforms=Padding(height_image, width_image),
+        batch_size=batch_size
+    )
+
+    data_module_for_auc.setup(stage='test')  # Configura os dados para inferência
+    test_dataloader = data_module_for_auc.test_dataloader()
+
+    if torch.cuda.is_available():
+        device = "cuda"
+    elif torch.backends.mps.is_available():
+        device = "mps"
+    else:
+        device = "cpu"
+    print("Using device: ", device)
+
+    model.to(device)
+    model.eval()
+    
+    algorithm = AUC_calculate_v1(
+        model=model,
+        dataloader=test_dataloader,
+        num_points=10,
+        multimask_output=False,
+        experiment_num=experiment_num,
+        save_dir=save_dir
+    )
+
+    algorithm.process()
 
     return val_loss, train_loss, test_loss, val_mIoU, train_mIoU, test_mIoU
 
