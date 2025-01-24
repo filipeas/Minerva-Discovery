@@ -14,6 +14,11 @@
     "multimask_output": true,
     "vit_model": "vit-b",
     "checkpoint_sam": "/workspaces/Minerva-Discovery/shared_data/weights_sam/checkpoints_sam/sam_vit_b_01ec64.pth",
+    
     "train_path": "/workspaces/Minerva-Discovery/shared_data/seam_ai_datasets/seam_ai/images",
-    "annotation_path": "/workspaces/Minerva-Discovery/shared_data/seam_ai_datasets/seam_ai/annotations"
+    "annotation_path": "/workspaces/Minerva-Discovery/shared_data/seam_ai_datasets/seam_ai/annotations",
+
+    "use_file_test": true,
+    "test_path": "/workspaces/Minerva-Discovery/shared_data/seismic/f3_segmentation/images",
+    "test_annotation_path": "/workspaces/Minerva-Discovery/shared_data/seismic/f3_segmentation/annotations"
 }

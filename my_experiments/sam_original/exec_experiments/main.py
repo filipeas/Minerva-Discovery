@@ -33,6 +33,9 @@ def _init_experiment(
         checkpoint_path,
         train_path,
         annotation_path,
+        use_file_test,
+        test_path,
+        test_annotation_path,
         config_path,
 ):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -80,7 +83,27 @@ def _init_experiment(
                         apply_adapter["mask_decoder"] = LoRA
                     
                     """ starting training """
-                    val_loss_epoch, train_loss_epoch, test_loss_epoch, val_mIoU, train_mIoU, test_mIoU = execute_train(height_image, width_image, ratio, alpha, rank, train_path, annotation_path, multimask_output, batch_size, vit_model, checkpoint_path, num_classes, apply_freeze, apply_adapter, epochs, experiment_num, save_dir)
+                    val_loss_epoch, train_loss_epoch, test_loss_epoch, val_mIoU, train_mIoU, test_mIoU = execute_train(
+                        height_image, 
+                        width_image, 
+                        ratio, 
+                        alpha, 
+                        rank, 
+                        train_path, 
+                        annotation_path, 
+                        multimask_output, 
+                        batch_size, 
+                        vit_model, 
+                        checkpoint_path, 
+                        num_classes, 
+                        apply_freeze, 
+                        apply_adapter, 
+                        epochs, 
+                        experiment_num, 
+                        save_dir,
+                        use_file_test,
+                        test_path,
+                        test_annotation_path)
 
                     log_data.append({
                         "ratio": ratio,
@@ -114,7 +137,10 @@ def execute_train(
         apply_adapter,
         epochs,
         experiment_num, 
-        save_dir
+        save_dir,
+        use_file_test,
+        test_path,
+        test_annotation_path,
 ):
     data_module = DataModule(
         train_path=train_path,
@@ -162,8 +188,8 @@ def execute_train(
 
     # executing test for colect AUC
     data_module_for_auc = DataModule_for_AUC(
-        train_path=train_path,
-        annotations_path=annotation_path,
+        train_path=test_path if use_file_test else train_path,
+        annotations_path=test_annotation_path if use_file_test else annotation_path,
         transforms=Padding(height_image, width_image),
         batch_size=batch_size
     )
@@ -227,6 +253,9 @@ if __name__ == "__main__":
     checkpoint_sam = config["checkpoint_sam"]
     train_path = config["train_path"]
     annotation_path = config["annotation_path"]
+    use_file_test = config["use_file_test"]
+    test_path = config["test_path"]
+    test_annotation_path = config["test_annotation_path"]
 
     if not isinstance(data_ratios, list):
         raise ValueError("O parâmetro 'data_ratios' no JSON precisa ser uma lista.")
@@ -255,6 +284,9 @@ if __name__ == "__main__":
     print(f"{'checkpoint_sam':<20} {checkpoint_sam}")
     print(f"{'train_path':<20} {train_path}")
     print(f"{'annotation_path':<20} {annotation_path}")
+    print(f"{'use_file_test':<20} {use_file_test}")
+    print(f"{'test_path':<20} {test_path}")
+    print(f"{'test_annotation_path':<20} {test_annotation_path}")
     print(20*'-')
 
     _init_experiment(
@@ -275,6 +307,9 @@ if __name__ == "__main__":
         checkpoint_path=checkpoint_sam,
         train_path=train_path,
         annotation_path=annotation_path,
+        use_file_test=use_file_test,
+        test_path=test_path,
+        test_annotation_path=test_annotation_path,
         config_path=args.config
     )
 
