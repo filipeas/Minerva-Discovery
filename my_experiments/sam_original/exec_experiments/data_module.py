@@ -105,27 +105,20 @@ class DatasetForSAM(SimpleDataset):
                 sample = transform(sample)
             data_readers.append(sample)
         
-        data = {}
-        # apply transform_coords_input to image (only in the image, not in label)
-        # if self.transform_coords_input['point_coords'] is not None: # TODO adicionar essa parte quando implementar treino com prompts
-        # image = self.readers[0][index]
-        # TODO Implementar algum script que coloque pontos aleatoriamente nas fácies
-        # point_coords = self.transform_coords_input['point_coords'].apply_coords(point_coords, self.original_size)
-        # coords_torch = torch.as_tensor(point_coords, dtype=torch.float, device=self.device)
-        # labels_torch = torch.as_tensor(point_labels, dtype=torch.int, device=self.device)
-        # coords_torch, labels_torch = coords_torch[None, :, :], labels_torch[None, :]
-        
-        data['image'] = data_readers[0]
-        data['label'] = data_readers[1]
-        data['original_size'] = (int(data_readers[0].shape[1]), int(data_readers[0].shape[2])) # (tem que usar o shape depois do transform, se não dá erro) (int(image.shape[0]), int(image.shape[1]))
-        data['multimask_output'] = self.multimask_output
-        # TODO OBS: Só pode passar esses pontos se aplicar o transform_coords. Se tentar passar como None vai dar erro no Dataloader.
-        # data['point_coords'] = None
-        # data['point_labels'] = None
-        # data['boxes'] = None
-        # data['mask_inputs'] = None
+        image = data_readers[0]
+        if image.shape[0] == 1:
+            image = image.repeat(3, 1, 1)
+        image = (image * 255).clamp(0, 255).to(torch.uint8)
+        label = data_readers[1]
 
-        return data # (data, self.multimask_output)
+        data = {
+            'image': image,
+            'label': label,
+            'original_size': (int(data_readers[0].shape[1]), int(data_readers[0].shape[2])),
+            'multimask_output': self.multimask_output
+        }
+
+        return data
 
 """ class for create data module """
 class DataModule(L.LightningDataModule):
