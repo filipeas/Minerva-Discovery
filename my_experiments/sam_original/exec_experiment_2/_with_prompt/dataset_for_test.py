@@ -248,8 +248,8 @@ class AUC_calculate_v1():
                                 'image': image,
                                 'label': label,
                                 'original_size': (int(image.shape[1]), int(image.shape[2])),
-                                'point_coords': torch.tensor(point_coords, dtype=torch.long).unsqueeze(0),
-                                'point_labels': torch.tensor(point_labels, dtype=torch.long).unsqueeze(0)
+                                'point_coords': torch.tensor(point_coords, dtype=torch.long).unsqueeze(0).to(self.model.device),
+                                'point_labels': torch.tensor(point_labels, dtype=torch.long).unsqueeze(0).to(self.model.device)
                             }
                         
                             # Inferência
@@ -263,7 +263,7 @@ class AUC_calculate_v1():
 
                             # print("real_label shape: ", real_label.shape)
                             # print('pred shape: ', outputs[0]['masks'].squeeze().numpy().shape)
-                            diff, new_point_type = self.calculate_diff_label_pred(label=real_label, pred=outputs[0]['masks'].squeeze().numpy())
+                            diff, new_point_type = self.calculate_diff_label_pred(label=real_label, pred=outputs[0]['masks'].squeeze().cpu().numpy())
                         
                             # salvando progresso
                             new_row = pd.DataFrame([{
