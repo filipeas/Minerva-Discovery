@@ -33,10 +33,11 @@ def _init_experiment(
         checkpoint_path,
         train_path,
         annotation_path,
-        use_file_test,
-        test_path,
-        test_annotation_path,
         config_path,
+        apply_special_test,
+        train_path_special_test,
+        annotation_path_special_test,
+        gpu_index
 ):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     save_dir = Path(os.getcwd()) / f"results/{name}_experiment_{timestamp}"
@@ -101,9 +102,10 @@ def _init_experiment(
                         epochs, 
                         experiment_num, 
                         save_dir,
-                        use_file_test,
-                        test_path,
-                        test_annotation_path)
+                        apply_special_test,
+                        train_path_special_test,
+                        annotation_path_special_test,
+                        gpu_index)
 
                     log_data.append({
                         "ratio": ratio,
@@ -138,9 +140,10 @@ def execute_train(
         epochs,
         experiment_num, 
         save_dir,
-        use_file_test,
-        test_path,
-        test_annotation_path,
+        apply_special_test,
+        train_path_special_test,
+        annotation_path_special_test,
+        gpu_index
 ):
     data_module = DataModule(
         train_path=train_path,
@@ -168,7 +171,7 @@ def execute_train(
     trainer = L.Trainer(
         max_epochs=epochs,
         accelerator="gpu",
-        devices=1,
+        devices=[gpu_index],  # Use o índice da GPU especificado,
         logger=False,
         enable_checkpointing=False
     )
@@ -188,8 +191,8 @@ def execute_train(
 
     # executing test for colect AUC
     data_module_for_auc = DataModule_for_AUC(
-        train_path=test_path if use_file_test else train_path,
-        annotations_path=test_annotation_path if use_file_test else annotation_path,
+        train_path=train_path_special_test if apply_special_test else train_path,
+        annotations_path=annotation_path_special_test if apply_special_test else annotation_path,
         transforms=Padding(height_image, width_image),
         batch_size=batch_size
     )
@@ -198,7 +201,7 @@ def execute_train(
     test_dataloader = data_module_for_auc.test_dataloader()
 
     if torch.cuda.is_available():
-        device = "cuda"
+        device = f"cuda:{gpu_index}"  # Use o índice da GPU especificado
     elif torch.backends.mps.is_available():
         device = "mps"
     else:
@@ -253,9 +256,10 @@ if __name__ == "__main__":
     checkpoint_sam = config["checkpoint_sam"]
     train_path = config["train_path"]
     annotation_path = config["annotation_path"]
-    use_file_test = config["use_file_test"]
-    test_path = config["test_path"]
-    test_annotation_path = config["test_annotation_path"]
+    apply_special_test = config["apply_special_test"]
+    train_path_special_test = config["train_path_special_test"]
+    annotation_path_special_test = config["annotation_path_special_test"]
+    gpu_index = config["gpu_index"]
 
     if not isinstance(data_ratios, list):
         raise ValueError("O parâmetro 'data_ratios' no JSON precisa ser uma lista.")
@@ -284,9 +288,10 @@ if __name__ == "__main__":
     print(f"{'checkpoint_sam':<20} {checkpoint_sam}")
     print(f"{'train_path':<20} {train_path}")
     print(f"{'annotation_path':<20} {annotation_path}")
-    print(f"{'use_file_test':<20} {use_file_test}")
-    print(f"{'test_path':<20} {test_path}")
-    print(f"{'test_annotation_path':<20} {test_annotation_path}")
+    print(f"{'apply_special_test':<20} {apply_special_test}")
+    print(f"{'train_path_special_test':<20} {train_path_special_test}")
+    print(f"{'annotation_path_special_test':<20} {annotation_path_special_test}")
+    print(f"{'gpu_index':<20} {gpu_index}")
     print(20*'-')
 
     _init_experiment(
@@ -307,10 +312,11 @@ if __name__ == "__main__":
         checkpoint_path=checkpoint_sam,
         train_path=train_path,
         annotation_path=annotation_path,
-        use_file_test=use_file_test,
-        test_path=test_path,
-        test_annotation_path=test_annotation_path,
-        config_path=args.config
+        config_path=args.config,
+        apply_special_test=apply_special_test,
+        train_path_special_test=train_path_special_test,
+        annotation_path_special_test=annotation_path_special_test,
+        gpu_index=gpu_index
     )
 
     print("___END OF EXPERIMENT___")
