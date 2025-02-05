@@ -13,10 +13,10 @@
     "data_ratios": [1.0],
     "gpu_index": 0,
     "vit_model": "vit-b",
-    "checkpoint_sam": "/workspaces/Minerva-Discovery/shared_data/weights_sam/checkpoints_sam/sam_vit_b_01ec64.pth",
-    "train_path": "/workspaces/Minerva-Discovery/shared_data/seismic/f3_segmentation/images",
-    "annotation_path": "/workspaces/Minerva-Discovery/shared_data/seismic/f3_segmentation/annotations",
+    "checkpoint_sam": "/home/filipe.sampaio/workspace/checkpoints_sam/sam_vit_b_01ec64.pth",
+    "train_path": "/home/filipe.sampaio/workspace/data/f3/images",
+    "annotation_path": "/home/filipe.sampaio/workspace/data/f3/annotations",
     "apply_special_test": true,
-    "train_path_special_test": "/workspaces/Minerva-Discovery/shared_data/seam_ai_datasets/seam_ai/images",
-    "annotation_path_special_test": "/workspaces/Minerva-Discovery/shared_data/seam_ai_datasets/seam_ai/annotations"
+    "train_path_special_test": "/home/filipe.sampaio/workspace/data/seam_ai/images",
+    "annotation_path_special_test": "/home/filipe.sampaio/workspace/data/seam_ai/annotations"
 }
