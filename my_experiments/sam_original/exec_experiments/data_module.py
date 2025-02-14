@@ -131,6 +131,7 @@ class DataModule(L.LightningDataModule):
         multimask_output:bool = True,
         batch_size: int = 1,
         data_ratio: float = 1.0,
+        filter_type: str = None,
         num_workers: int = None,
     ):
         super().__init__()
@@ -141,6 +142,11 @@ class DataModule(L.LightningDataModule):
         self.multimask_output = multimask_output
         self.batch_size = batch_size
         self.data_ratio = data_ratio
+
+        if filter_type not in (None, "il_", "xl_"):
+            raise ValueError(f"filter_type must be 'il_', 'xl_', or None, but got '{filter_type}'")
+        self.filter_type = filter_type
+
         self.num_workers = (
             num_workers if num_workers is not None else os.cpu_count()
         )
@@ -151,6 +157,19 @@ class DataModule(L.LightningDataModule):
         if stage == "fit":
             train_img_reader = TiffReader(self.train_path / "train")
             train_label_reader = PNGReader(self.annotations_path / "train")
+
+            # applying filter for get only inline or crossline
+            if self.filter_type:
+                # to images
+                train_img_reader.files = [
+                    f for f in train_img_reader.files 
+                    if f.name.startswith(self.filter_type) and f.name.lower().endswith((".tiff", ".tif"))
+                ]
+                # to labels
+                train_label_reader.files = [
+                    f for f in train_label_reader.files 
+                    if f.name.startswith(self.filter_type) and f.name.lower().endswith((".png"))
+                ]
 
             # applying ratio
             num_train_samples = int(len(train_img_reader) * self.data_ratio)

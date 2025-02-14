@@ -29,6 +29,7 @@ def _init_experiment(
         aways_freeze_this_component,
         apply_in_components,
         multimask_output,
+        filter_type,
         vit_model,
         checkpoint_path,
         train_path,
@@ -93,6 +94,7 @@ def _init_experiment(
                         train_path, 
                         annotation_path, 
                         multimask_output, 
+                        filter_type,
                         batch_size, 
                         vit_model, 
                         checkpoint_path, 
@@ -131,6 +133,7 @@ def execute_train(
         train_path,
         annotation_path,
         multimask_output,
+        filter_type,
         batch_size,
         vit_model,
         checkpoint_path,
@@ -150,6 +153,7 @@ def execute_train(
         annotations_path=annotation_path,
         transforms=Padding(height_image, width_image),
         multimask_output=multimask_output,
+        filter_type=filter_type,
         batch_size=batch_size,
         data_ratio=ratio
     )
@@ -252,6 +256,7 @@ if __name__ == "__main__":
     aways_freeze_this_component = config['aways_freeze_this_component']
     apply_in_components = config['apply_in_components']
     multimask_output = config['multimask_output']
+    filter_type = config['filter_type']
     vit_model = config["vit_model"]
     checkpoint_sam = config["checkpoint_sam"]
     train_path = config["train_path"]
@@ -260,6 +265,11 @@ if __name__ == "__main__":
     train_path_special_test = config["train_path_special_test"]
     annotation_path_special_test = config["annotation_path_special_test"]
     gpu_index = config["gpu_index"]
+
+    # Validar filter_type
+    valid_filter_types = {"il_", "xl_", None}
+    if filter_type not in valid_filter_types:
+        raise ValueError(f"O parâmetro 'filter_type' deve ser 'il_', 'xl_' ou None, mas foi '{filter_type}'")
 
     if not isinstance(data_ratios, list):
         raise ValueError("O parâmetro 'data_ratios' no JSON precisa ser uma lista.")
@@ -284,6 +294,7 @@ if __name__ == "__main__":
     print(f"{'aways_freeze_this_component':<20} {aways_freeze_this_component}")
     print(f"{'apply_in_components':<20} {apply_in_components}")
     print(f"{'multimask_output'}:<20 {multimask_output}")
+    print(f"{'filter_type'}:<20 {filter_type}")
     print(f"{'vit_model':<20} {vit_model}")
     print(f"{'checkpoint_sam':<20} {checkpoint_sam}")
     print(f"{'train_path':<20} {train_path}")
@@ -308,6 +319,7 @@ if __name__ == "__main__":
         aways_freeze_this_component=aways_freeze_this_component,
         apply_in_components=apply_in_components,
         multimask_output=multimask_output,
+        filter_type=filter_type,
         vit_model=vit_model,
         checkpoint_path=checkpoint_sam,
         train_path=train_path,
