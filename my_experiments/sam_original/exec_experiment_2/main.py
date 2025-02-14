@@ -26,6 +26,7 @@ def _init_experiment(
         height_image, 
         width_image,
         data_ratios,
+        filter_type,
         vit_model,
         checkpoint_path,
         train_path,
@@ -57,6 +58,7 @@ def _init_experiment(
                     rank=rank, 
                     train_path=train_path, 
                     annotation_path=annotation_path, 
+                    filter_type=filter_type,
                     batch_size=batch_size, 
                     vit_model=vit_model, 
                     checkpoint_path=checkpoint_path, 
@@ -94,6 +96,7 @@ def execute_train(
         rank,
         train_path,
         annotation_path,
+        filter_type,
         batch_size,
         vit_model,
         checkpoint_path,
@@ -111,6 +114,7 @@ def execute_train(
         train_path=train_path,
         annotations_path=annotation_path,
         transforms=Padding(height_image, width_image),
+        filter_type=filter_type,
         batch_size=batch_size,
         select_facie=select_facie,
         data_ratio=ratio
@@ -213,6 +217,7 @@ if __name__ == "__main__":
     height_image = config['height_image']
     width_image = config['width_image']
     data_ratios = config["data_ratios"]
+    filter_type = config['filter_type']
     vit_model = config["vit_model"]
     checkpoint_sam = config["checkpoint_sam"]
     train_path = config["train_path"]
@@ -221,6 +226,11 @@ if __name__ == "__main__":
     train_path_special_test = config["train_path_special_test"]
     annotation_path_special_test = config["annotation_path_special_test"]
     gpu_index = config["gpu_index"]
+
+    # Validar filter_type
+    valid_filter_types = {"il_", "xl_", None}
+    if filter_type not in valid_filter_types:
+        raise ValueError(f"O parâmetro 'filter_type' deve ser 'il_', 'xl_' ou None, mas foi '{filter_type}'")
 
     if not isinstance(data_ratios, list):
         raise ValueError("O parâmetro 'data_ratios' no JSON precisa ser uma lista.")
@@ -241,6 +251,7 @@ if __name__ == "__main__":
     print(f"{'height_image':<20} {height_image}")
     print(f"{'width_image':<20} {width_image}")
     print(f"{'data_ratios':<20} {data_ratios}")
+    print(f"{'filter_type'}:<20 {filter_type}")
     print(f"{'vit_model':<20} {vit_model}")
     print(f"{'checkpoint_sam':<20} {checkpoint_sam}")
     print(f"{'train_path':<20} {train_path}")
@@ -263,6 +274,7 @@ if __name__ == "__main__":
         height_image=height_image, 
         width_image=width_image,
         data_ratios=data_ratios,
+        filter_type=filter_type,
         vit_model=vit_model,
         checkpoint_path=checkpoint_sam,
         train_path=train_path,
