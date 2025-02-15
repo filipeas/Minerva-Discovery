@@ -95,7 +95,7 @@ def execute_train(
         rank,
         train_path,
         annotation_path,
-        filter_type
+        filter_type,
         batch_size,
         vit_model,
         checkpoint_path,
