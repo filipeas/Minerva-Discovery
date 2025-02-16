@@ -11,7 +11,7 @@
     "data_ratios": [1.0],
     "aways_freeze_this_component": "prompt_encoder",
     "apply_in_components": ["fine_tuning"],
-    "filter_type":"il_",
+    "filter_type":"xl_",
     "multimask_output": true,
     "gpu_index": 0,
     "vit_model": "vit-b",
