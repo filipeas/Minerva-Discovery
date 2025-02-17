@@ -1,0 +1,23 @@
+{
+    "name": "experiment_3_f3",
+    "height_image": 255,
+    "width_image": 701,
+    "num_classes": 3,
+    "num_facies": 6,
+    "batch_size": 2,
+    "alpha": 1,
+    "rank": 4,
+    "num_points": 3,
+    "n": 3,
+    "epochs": 20,
+    "data_ratios": [1.0],
+    "filter_type":"xl_",
+    "gpu_index": 0,
+    "vit_model": "vit-b",
+    "checkpoint_sam": "/home/filipe.sampaio/workspace/checkpoints_sam/sam_vit_b_01ec64.pth",
+    "train_path": "/home/filipe.sampaio/workspace/data/f3/images",
+    "annotation_path": "/home/filipe.sampaio/workspace/data/f3/annotations",
+    "apply_special_test": false,
+    "train_path_special_test": "/home/filipe.sampaio/workspace/data/seam_ai/images",
+    "annotation_path_special_test": "/home/filipe.sampaio/workspace/data/seam_ai/annotations"
+}
