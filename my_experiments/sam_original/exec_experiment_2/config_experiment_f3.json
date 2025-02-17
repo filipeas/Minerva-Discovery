@@ -11,7 +11,7 @@
     "n": 3,
     "epochs": 20,
     "data_ratios": [1.0],
-    "filter_type":"il_",
+    "filter_type":"xl_",
     "gpu_index": 1,
     "vit_model": "vit-b",
     "checkpoint_sam": "/workspaces/Minerva-Discovery/shared_data/weights_sam/checkpoints_sam/sam_vit_b_01ec64.pth",
