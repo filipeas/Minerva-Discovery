@@ -20,6 +20,7 @@ run_*.yaml
 experiment_*
 results
 results_with_prompt
+my_experiments/sam_original/evaluate_experiments/parihaka/tmp/
 
 # nao ignorar arquivos de experimento py
 !experiment_*.py
