@@ -10,6 +10,8 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 
 from minerva.pipelines.lightning_pipeline import SimpleLightningPipeline
 
+from dataset import ParihakaDataModuleForSAM
+
 from minerva.data.data_modules.parihaka import (
     ParihakaDataModule,
     default_train_transforms,
@@ -17,6 +19,46 @@ from minerva.data.data_modules.parihaka import (
 )
 from minerva.utils.typing import PathLike
 from minerva.transforms.transform import Indexer, Unsqueeze, Squeeze
+
+
+def get_data_module_for_sam(
+        dataset_class,
+        dataset_params,
+        root_data_dir: PathLike,
+        root_annotation_dir: PathLike,
+        img_size: Optional[Tuple[int, int]] = (1006, 590),
+        batch_size: int = 1,
+        num_workers: Optional[int] = None,
+        seed: int = 42,
+        single_channel: bool = False
+) -> L.LightningDataModule:
+    train_transforms = default_train_transforms(img_size=img_size, seed=seed)
+    if single_channel:
+        train_transforms[0] += Indexer(0)
+        train_transforms[0] += Unsqueeze(0)
+        train_transforms[1] += Indexer(0)
+        train_transforms[1] += Unsqueeze(0)
+
+    test_transforms = default_test_transforms(img_size=img_size, seed=seed)
+    if single_channel:
+        test_transforms[0] += Indexer(0)
+        test_transforms[0] += Unsqueeze(0)
+        test_transforms[1] += Indexer(0)
+        test_transforms[1] += Unsqueeze(0)
+
+    test_transforms[1] += Squeeze(0)
+
+    return ParihakaDataModuleForSAM(
+        dataset_class=dataset_class,
+        dataset_params=dataset_params,
+        root_data_dir=root_data_dir,
+        root_annotation_dir=root_annotation_dir,
+        train_transforms=train_transforms,
+        valid_transforms=train_transforms,
+        test_transforms=test_transforms,
+        batch_size=batch_size,
+        num_workers=num_workers,
+    )
 
 
 def get_data_module(

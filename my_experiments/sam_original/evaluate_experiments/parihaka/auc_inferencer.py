@@ -1,47 +1,51 @@
 import os
+from tqdm import tqdm
 import torch
+import torch.nn.functional as F
 import lightning as L
 import numpy as np
 import cv2
 from skimage.morphology import skeletonize
-from skimage.graph import route_through_array
 from skimage.measure import find_contours
-from scipy.ndimage import distance_transform_edt
 from torchmetrics import JaccardIndex
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap, BoundaryNorm
+from matplotlib.colors import ListedColormap
+from grad_cam import GradCAM
 
-def plot_all(image, label, pred, diff, score, point_coords, point_labels, i):
+def plot_all(image, label, pred=None, diff=None, score=None, point_coords=None, point_labels=None, cam=None, i=0, batch_idx=0, process_func='', sugest_filename="sample_pred_all", model_idx="model_name"):
     """
-    Plota as imagens lado a lado: imagem original, label, predição, diff.
+    Plota as imagens lado a lado: imagem original, label, predição (opcional), diff (opcional) e Grad-CAM (opcional).
     Pontos acumulados são exibidos sobre as imagens.
+    Uma colorbar com os valores mínimo e máximo do Grad-CAM é adicionada à direita do subplot do Grad-CAM.
     """
-    num_subplots = 4  # Número de subplots: imagem original, label, pred, diff
+    # Determina o número de subplots com base nos argumentos fornecidos
+    num_subplots = 2  # Imagem original e label são obrigatórios
+    if pred is not None:
+        num_subplots += 1
+    if diff is not None:
+        num_subplots += 1
+    if cam is not None:
+        num_subplots += 1
+
     plt.clf()
     fig, axes = plt.subplots(1, num_subplots, figsize=(5 * num_subplots, 5))
 
-    # Normaliza os dados para o intervalo [0, 1] se forem floats
-    if image.dtype == np.float32 or image.dtype == np.float64:
-        image = (image - np.min(image)) / (np.max(image) - np.min(image))
-    elif image.dtype == np.uint8:
-        image = np.clip(image, 0, 255)
+    # Função para normalizar os dados
+    def normalize(data):
+        if data.dtype == np.float32 or data.dtype == np.float64:
+            return (data - np.min(data)) / (np.max(data) - np.min(data))
+        elif data.dtype == np.uint8:
+            return np.clip(data, 0, 255)
+        return data
 
-    if label.dtype == np.float32 or label.dtype == np.float64:
-        label = (label - np.min(label)) / (np.max(label) - np.min(label))
-    elif label.dtype == np.uint8:
-        label = np.clip(label, 0, 255)
-
-    if pred.dtype == np.float32 or pred.dtype == np.float64:
-        pred = (pred - np.min(pred)) / (np.max(pred) - np.min(pred))
-    elif pred.dtype == np.uint8:
-        pred = np.clip(pred, 0, 255)
-
-    if diff.dtype == np.float32 or diff.dtype == np.float64:
-        diff = (diff - np.min(diff)) / (np.max(diff) - np.min(diff))
-    elif diff.dtype == np.uint8:
-        diff = np.clip(diff, 0, 255)
+    image = normalize(image)
+    label = normalize(label)
+    if pred is not None:
+        pred = normalize(pred)
+    if diff is not None:
+        diff = normalize(diff)
 
     # Plot 1: Imagem original
     axes[0].imshow(image, cmap='gray')
@@ -53,30 +57,47 @@ def plot_all(image, label, pred, diff, score, point_coords, point_labels, i):
     axes[1].set_title("Label")
     axes[1].axis('off')
 
-    # Plot 3: Predição acumulada
-    axes[2].imshow(pred, cmap='gray')
-    axes[2].set_title(f"Pred - Score: {score}")
-    axes[2].axis('off')
+    # Plot 3: Predição acumulada (opcional)
+    next_idx = 2
+    if pred is not None:
+        axes[next_idx].imshow(pred, cmap='gray')
+        axes[next_idx].set_title(f"Pred - Score: {score}" if score is not None else "Pred")
+        axes[next_idx].axis('off')
+        next_idx += 1
 
-    # Plot 4: Diferença entre label e pred
-    axes[3].imshow(diff, cmap='gray')
-    axes[3].set_title("Difference (Label - Pred)")
-    axes[3].axis('off')
+    # Plot 4: Diferença entre label e predição (opcional)
+    if diff is not None:
+        axes[next_idx].imshow(diff, cmap='gray')
+        axes[next_idx].set_title("Difference (Label - Pred)")
+        axes[next_idx].axis('off')
+        next_idx += 1
 
-    # Adiciona os pontos em todas as imagens
-    for ax in axes:
-        for (x, y), label in zip(point_coords, point_labels):
-            color = 'green' if label == 1 else 'red'
-            ax.scatter(x, y, color=color, s=50, edgecolors='white')
+    # Plot 5: Grad-CAM (opcional) com coluna de colorbar
+    if cam is not None:
+        im = axes[next_idx].imshow(cam, cmap='jet')
+        axes[next_idx].set_title("Grad-CAM sob a camada 'neck'")
+        axes[next_idx].axis('off')
+        # Adiciona uma colorbar à direita do subplot do Grad-CAM
+        cbar = fig.colorbar(im, ax=axes[next_idx], fraction=0.046, pad=0.04)
+        # Define ticks com os valores mínimo e máximo do cam
+        cbar.set_ticks([np.min(cam), np.max(cam)])
+        cbar.set_ticklabels(["Min: {:.2f}".format(np.min(cam)), "Max: {:.2f}".format(np.max(cam))])
+
+    # Adiciona os pontos em todas as imagens (opcional)
+    if point_coords is not None and point_labels is not None:
+        for ax in axes:
+            for (x, y), lbl in zip(point_coords, point_labels):
+                color = 'green' if lbl == 1 else 'red'
+                ax.scatter(x, y, color=color, s=50, edgecolors='white')
 
     plt.tight_layout()
-    os.makedirs('tmp/debug_region', exist_ok=True)
-    filename = f"sample_pred_all_{i}"  # Nome do arquivo
-    output_path = f"tmp/debug_region/{filename}.png"
+    os.makedirs(f"tmp/debug_region/{model_idx}/{process_func}/{batch_idx}", exist_ok=True)
+    filename = f"{sugest_filename}_{i}"  # Nome do arquivo
+    output_path = f"tmp/debug_region/{model_idx}/{process_func}/{batch_idx}/{filename}.png"
     plt.savefig(output_path)
-    plt.close()  # Fecha corretamente a figura
+    plt.close()
 
-def plot_facie_with_prompts(facie_idx, point_coords_positive, point_coords_negative, region):
+def plot_facie_with_prompts(facie_idx, point_coords_positive, point_coords_negative, region, batch_idx, process_func, model_idx="model_name"):
     # Verificar se a imagem 'region' está em escala de cinza (preto e branco)
     if region.ndim != 2:
         raise ValueError("A imagem 'region' deve ser uma imagem em preto e branco (escala de cinza).")
@@ -98,11 +119,65 @@ def plot_facie_with_prompts(facie_idx, point_coords_positive, point_coords_negat
     ax.scatter(coords_negative[:, 0], coords_negative[:, 1], c='red', marker='o', s=25)
 
     # Salvar a imagem
-    os.makedirs('tmp/debug_region', exist_ok=True)
-    output_path = f"tmp/debug_region/image_facie_{facie_idx}_with_coordinates.png"
+    os.makedirs(f"tmp/debug_region/{model_idx}/{process_func}/{batch_idx}", exist_ok=True)
+    output_path = f"tmp/debug_region/{model_idx}/{process_func}/{batch_idx}/image_facie_{facie_idx}_with_coordinates.png"
     plt.savefig(output_path)
     plt.close()
 
+def plot_result_batch_preds(batch_preds, batch_idx, process_func, model_idx="model_name"):
+    label_cmap = ListedColormap(
+        [
+            [0.29411764705882354, 0.4392156862745098, 0.7333333333333333],
+            [0.5882352941176471, 0.7607843137254902, 0.8666666666666667],
+            [0.8901960784313725, 0.9647058823529412, 0.9764705882352941],
+            [0.9803921568627451, 0.8745098039215686, 0.4666666666666667],
+            [0.9607843137254902, 0.47058823529411764, 0.29411764705882354],
+            [0.8470588235294118, 0.1568627450980392, 0.1411764705882353],
+            [1.0, 0.7529411764705882, 0.796078431372549], #background
+        ]
+    )
+    
+    for sample_idx, sample_preds in enumerate(batch_preds):
+        # sample_preds tem formato [num_prompts, H, W]
+        for prompt_idx in range(sample_preds.shape[0]):
+            # print(f"::DEBUG - Saving image {sample_idx} (Prompt {prompt_idx})")
+            # Converter a predição para um array numpy
+            image_array = sample_preds[prompt_idx].cpu().numpy()
+
+            # Atualize a verificação para permitir os valores 0 a 5 e o 7 (fundo)
+            unique_values = np.unique(image_array)
+            if not np.all(np.isin(unique_values, [0, 1, 2, 3, 4, 5, 7])):
+                raise ValueError("A imagem contém valores fora do intervalo permitido (0 a 5 ou 7).")
+
+            # print("shape do sample_preds: ", sample_preds[prompt_idx].shape)
+            # print("qtd de pixels únicos: ", unique_values)
+
+            # Número de subplots necessários (imagem original + máscaras para cada valor único)
+            num_plots = len(unique_values) + 1
+            fig, axes = plt.subplots(1, num_plots, figsize=(15, 5))
+
+            # Plotar a imagem original com o mapeamento de cores customizado
+            # Usamos vmin=0 e vmax=7 para garantir que o valor 7 seja mapeado para a última cor
+            axes[0].imshow(image_array, cmap=label_cmap, vmin=0, vmax=7)
+            axes[0].set_title('Imagem')
+            axes[0].axis('off')
+
+            # Plotar cada nível (valor) em uma máscara binária
+            for i, value in enumerate(unique_values, start=1):
+                mask = (image_array == value)
+                pixel_count = np.sum(mask)
+                binary_image = np.where(mask, 255, 0)
+
+                axes[i].imshow(binary_image, cmap='gray', vmin=0, vmax=255)
+                axes[i].set_title(f'Valor {value}\nPixels: {pixel_count}')
+                axes[i].axis('off')
+
+            plt.suptitle(f'Sample {sample_idx} - Prompt {prompt_idx}')
+
+            os.makedirs(f"tmp/debug_region/{model_idx}/{process_func}/{batch_idx}", exist_ok=True)
+            output_path = f"tmp/debug_region/{model_idx}/{process_func}/{batch_idx}/sample_{sample_idx}_prompt_{prompt_idx}.png"
+            plt.savefig(output_path)
+            plt.close()
 class AUCInferencer(L.LightningModule):
     def __init__(
             self, 
@@ -110,7 +185,9 @@ class AUCInferencer(L.LightningModule):
             data_module:L.LightningDataModule,
             data_module_setup:str = 'predict',
             multimask_output: bool = False, 
-            num_points: int = 3
+            num_points: int = 3,
+            using_methodology: int = 2,
+            model_idx: str = "model_name"
             ):
         super().__init__()
         self.model = model
@@ -121,6 +198,9 @@ class AUCInferencer(L.LightningModule):
 
         data_module.setup(stage=data_module_setup)
         self.dataloader = data_module.test_dataloader()  # Get the dataloader of the data_module
+
+        self.using_methodology = using_methodology # select what methodology to use
+        self.model_idx = model_idx # for create a folder with experiments using this model
     
     def set_points(self):
         """ Teset the accumulated points """
@@ -131,74 +211,145 @@ class AUCInferencer(L.LightningModule):
         """ Make inference with model """
         return self.model(batch, multimask_output=self.multimask_output)
     
-    def test_step(self, batch, batch_idx):
+    def predict_step(self, batch, batch_idx):
         """ Test step to use Trainer.test() """
-        batch_preds = self.process(batch)
-
-        # calculate metrics
+        # if batch_idx == 0 or batch_idx == 199: # test
+        if self.using_methodology == 1:
+            batch_preds = self.process_v1(batch, batch_idx, "process_v1")
+            plot_result_batch_preds(batch_preds=batch_preds, batch_idx=batch_idx, process_func="process_v1", model_idx=self.model_idx) # plot results
+        elif self.using_methodology == 2:
+            batch_preds = self.process_v2(batch, batch_idx, "process_v2")
+            plot_result_batch_preds(batch_preds=batch_preds, batch_idx=batch_idx, process_func="process_v2", model_idx=self.model_idx) # plot results
+        else:
+            raise ValueError(f"Informe um valor no parametro using_methodology. Pode ser 1 ou 2.")
         
-        label_cmap = ListedColormap(
-            [
-                [0.29411764705882354, 0.4392156862745098, 0.7333333333333333],
-                [0.5882352941176471, 0.7607843137254902, 0.8666666666666667],
-                [0.8901960784313725, 0.9647058823529412, 0.9764705882352941],
-                [0.9803921568627451, 0.8745098039215686, 0.4666666666666667],
-                [0.9607843137254902, 0.47058823529411764, 0.29411764705882354],
-                [0.8470588235294118, 0.1568627450980392, 0.1411764705882353],
-                [1.0, 0.7529411764705882, 0.796078431372549], #background
-            ]
-        )
-
-        for sample_idx, sample_preds in enumerate(batch_preds):
-            # sample_preds tem formato [num_prompts, H, W]
-            for prompt_idx in range(sample_preds.shape[0]):
-                print(f"::DEBUG - Saving image {sample_idx} (Prompt {prompt_idx})")
-                # Converter a predição para um array numpy
-                image_array = sample_preds[prompt_idx].cpu().numpy()
-
-                # Atualize a verificação para permitir os valores 0 a 5 e o 7 (fundo)
-                unique_values = np.unique(image_array)
-                if not np.all(np.isin(unique_values, [0, 1, 2, 3, 4, 5, 7])):
-                    raise ValueError("A imagem contém valores fora do intervalo permitido (0 a 5 ou 7).")
-
-                print("shape do sample_preds: ", sample_preds[prompt_idx].shape)
-                print("qtd de pixels únicos: ", unique_values)
-
-                # Número de subplots necessários (imagem original + máscaras para cada valor único)
-                num_plots = len(unique_values) + 1
-                fig, axes = plt.subplots(1, num_plots, figsize=(15, 5))
-
-                # Plotar a imagem original com o mapeamento de cores customizado
-                # Usamos vmin=0 e vmax=7 para garantir que o valor 7 seja mapeado para a última cor
-                axes[0].imshow(image_array, cmap=label_cmap, vmin=0, vmax=7)
-                axes[0].set_title('Imagem Original')
-                axes[0].axis('off')
-
-                # Plotar cada nível (valor) em uma máscara binária
-                for i, value in enumerate(unique_values, start=1):
-                    mask = (image_array == value)
-                    pixel_count = np.sum(mask)
-                    binary_image = np.where(mask, 255, 0)
-
-                    axes[i].imshow(binary_image, cmap='gray', vmin=0, vmax=255)
-                    axes[i].set_title(f'Valor {value}\nPixels: {pixel_count}')
-                    axes[i].axis('off')
-
-                plt.suptitle(f'Sample {sample_idx} - Prompt {prompt_idx}')
-
-                os.makedirs('tmp/debug_region', exist_ok=True)
-                output_path = f"tmp/debug_region/sample_{sample_idx}_prompt_{prompt_idx}.png"
-                plt.savefig(output_path)
-                plt.close()
-        
-        exit()
+        # print(batch_preds.shape, type(batch_preds))
+        # exit()
 
         return batch_preds
     
-    def test_dataloader(self):
+    def predict_dataloader(self):
         return self.dataloader
     
-    def process(self, batch):
+    """ version 1 """
+    def process_v1(self, batch, batch_idx, process_func, exec_grad:bool=False, target_layer:str="model.image_encoder.neck.2"):
+        """ Process the batch sended by test_step """
+        
+        # processing default dataset of minerva
+        if isinstance(batch, list) and len(batch) == 2:
+            batch_preds = []
+            count_pred = 0
+            for sample_idx in range(len(batch[0])):
+                image = batch[0][sample_idx]
+                label = batch[1][sample_idx]
+
+                # normalize and add 3 channels
+                if image.shape[0] == 1:
+                    image = image.repeat(3, 1, 1)
+                image = (image * 255).clamp(0, 255).to(torch.uint8)
+                image = image.to(self.model.device)
+
+                num_facies = torch.unique(label)  # Identify the classes of the sample
+                point_type = 'positive' # The first point (prompt) is positive
+
+                # Initialize a list to store predictions for each number of points
+                facie_preds = []
+
+                for facie_idx, facie in enumerate(num_facies):
+                    point_preds = [torch.zeros_like(label) for _ in range(self.num_points)]
+                    region = (label == facie).to(torch.uint8).to(self.device)
+                    real_label = region
+                    
+                    # Calculate the number of pixels in the region
+                    num_pixels = torch.sum(region).item()
+                    if num_pixels <= 1:
+                        continue # ignore region with 1 pixel or less
+
+                    for point in range(self.num_points):
+                        point_coords, point_labels = self.calculate_center_region(region.cpu().numpy(), point_type)
+
+                        # Cria os tensores com os pontos acumulados
+                        point_coords_tensor = torch.tensor(point_coords, dtype=torch.long).unsqueeze(0).to(self.device)
+                        point_labels_tensor = torch.tensor(point_labels, dtype=torch.long).unsqueeze(0).to(self.device)
+
+                        batch = {
+                            'image': image,
+                            'label': label,
+                            'original_size': (int(image.shape[1]), int(image.shape[2])),
+                            'point_coords': point_coords_tensor,
+                            'point_labels': point_labels_tensor
+                        }
+
+                        # calculate GRAD-CAM
+                        if exec_grad:
+                            # print(f"Executing Grad-CAM in {target_layer}")
+                            grad_cam = GradCAM(model=self.model, target_layer=target_layer)
+                            cam = grad_cam.generate_cam(batch=batch, label=region, backward_aproach=2)
+                            plot_all(
+                                image=image.permute(1, 2, 0).cpu().numpy(),
+                                label=region.cpu().numpy(),
+                                score=000,
+                                point_coords=self.accumulated_coords,
+                                point_labels=self.accumulated_labels,
+                                i=count_pred,  # Pass the index to the plot_all function
+                                batch_idx=batch_idx,
+                                process_func=process_func,
+                                cam=cam,
+                                sugest_filename=f"using_process_v1_pred_with_grad_cam_{target_layer}_backward_aproach_{2}_in_facie_{facie_idx}_using_{point}_points",
+                                model_idx=self.model_idx
+                            )
+                            continue # only for calculate grad-cam
+
+                        outputs = self.forward([batch])
+                        mask = outputs > 0.0 # remover isso depois
+                        
+                        # Accumulate the predictions for the current facie
+                        # point_preds[point] = torch.where(mask, facie, torch.zeros_like(mask)).squeeze()
+                        point_preds[point] = torch.where(mask, facie, torch.full_like(mask, 7, dtype=facie.dtype)).squeeze()
+                        # point_preds[point] = torch.where(mask, facie, torch.full_like(mask, 7)).squeeze() # (mask.float() * (1+facie)).squeeze()
+                        # print(torch.unique(mask), torch.unique(point_preds[point]))
+
+                        # the difference need to be between real label and pred, beacause the difference needs a reference (real label)
+                        diff, new_point_type = self.calculate_diff_label_pred(label=real_label.cpu().numpy(), pred=mask.squeeze().cpu().numpy())
+
+                        # print(region.cpu().numpy().shape, mask.squeeze().cpu().numpy().shape)
+                        plot_all(
+                            image=image.permute(1, 2, 0).cpu().numpy(),
+                            label=real_label.cpu().numpy(),
+                            pred=mask.squeeze().cpu().numpy(),
+                            diff=diff,
+                            score=99,
+                            point_coords=self.accumulated_coords,
+                            point_labels=self.accumulated_labels,
+                            i=count_pred,  # Pass the index to the plot_all function
+                            batch_idx=batch_idx,
+                            process_func=process_func,
+                            model_idx=self.model_idx
+                        )
+                        count_pred += 1
+                        
+                        region = torch.tensor(diff).to(self.device)
+                        point_type = new_point_type
+                    point_type = 'positive'
+                    self.set_points()
+                    facie_preds.append(point_preds)
+                    # break
+                # Transpõe a lista para agrupar as predições de cada ponto
+                transposed_preds = list(zip(*facie_preds))
+                combined_preds = []
+                # Mescla as predições usando prioridade condicional: o valor do pixel só é substituído se o novo valor não for fundo (7)
+                for group in transposed_preds:
+                    merged = group[0]
+                    for pred in group[1:]:
+                        merged = torch.where(pred != 7, pred, merged)
+                    combined_preds.append(merged)
+                combined_preds = torch.stack(combined_preds, dim=0)
+                batch_preds.append(combined_preds)
+            batch_preds = torch.stack(batch_preds, dim=0)
+            return batch_preds
+    
+    """ version 2 """
+    def process_v2(self, batch, batch_idx, process_func, exec_grad:bool=False, target_layer:str="model.image_encoder.neck.2"):
         """ Process the batch sended by test_step """
         
         # processing default dataset of minerva
@@ -230,17 +381,16 @@ class AUCInferencer(L.LightningModule):
                     if num_pixels <= 1:
                         continue # ignore region with 1 pixel or less
 
-                    real_label = region
                     # plot facie with all prompts
                     point_coords_positive, point_coords_negative = self.get_points_in_region(region=region.cpu().numpy(), num_points_positive=self.num_points, num_points_negative=self.num_points)
                     
-                    plot_facie_with_prompts(facie_idx=facie_idx, point_coords_positive=point_coords_positive, point_coords_negative=point_coords_negative, region=region.cpu().numpy())
+                    if not exec_grad:
+                        # execute only if execute test
+                        plot_facie_with_prompts(facie_idx=facie_idx, point_coords_positive=point_coords_positive, point_coords_negative=point_coords_negative, region=region.cpu().numpy(), batch_idx=batch_idx, process_func=process_func, model_idx=self.model_idx)
                     
                     pos_idx = 0
                     neg_idx = 0
                     for point in range(self.num_points):
-                        # point_coords, point_labels = self.calculate_center_region(region.cpu().numpy(), point_type)
-                        
                         # Seleciona o próximo ponto de acordo com o tipo atual (point_type)
                         if point_type == 'positive':
                             novo_ponto = np.array([point_coords_positive[pos_idx]])
@@ -267,19 +417,43 @@ class AUCInferencer(L.LightningModule):
                             'point_labels': point_labels_tensor
                         }
 
+                        # calculate GRAD-CAM
+                        if exec_grad:
+                            # print(f"Executing Grad-CAM in {target_layer}")
+                            grad_cam = GradCAM(model=self.model, target_layer=target_layer)
+                            cam = grad_cam.generate_cam(batch=batch, label=region, backward_aproach=2)
+                            plot_all(
+                                image=image.permute(1, 2, 0).cpu().numpy(),
+                                label=region.cpu().numpy(),
+                                score=000,
+                                point_coords=self.accumulated_coords,
+                                point_labels=self.accumulated_labels,
+                                i=count_pred,  # Pass the index to the plot_all function
+                                batch_idx=batch_idx,
+                                process_func=process_func,
+                                cam=cam,
+                                sugest_filename=f"using_process_v2_pred_with_grad_cam_{target_layer}_backward_aproach_{2}_in_facie_{facie_idx}_using_{point}_points",
+                                model_idx=self.model_idx
+                            )
+                            continue # only for calculate grad-cam
+
+                        # calculate Rollout Attention (TODO)
+
+                        # Executing prediction
                         outputs = self.forward([batch])
-                        mask = outputs > 0.0 # remover isso depois
+                        mask = outputs > 0.0  # Remove this later
+                        # print(outputs.shape, type(outputs))
                         
                         # Accumulate the predictions for the current facie
                         # point_preds[point] = torch.where(mask, facie, torch.zeros_like(mask)).squeeze()
                         point_preds[point] = torch.where(mask, facie, torch.full_like(mask, 7, dtype=facie.dtype)).squeeze()
                         # point_preds[point] = torch.where(mask, facie, torch.full_like(mask, 7)).squeeze() # (mask.float() * (1+facie)).squeeze()
-                        print(torch.unique(mask), torch.unique(point_preds[point]))
+                        # print(torch.unique(mask), torch.unique(point_preds[point]))
 
                         # the difference need to be between real label and pred, beacause the difference needs a reference (real label)
                         diff, new_point_type = self.calculate_diff_label_pred(label=region.cpu().numpy(), pred=mask.squeeze().cpu().numpy())
 
-                        print(region.cpu().numpy().shape, mask.squeeze().cpu().numpy().shape)
+                        # print(region.cpu().numpy().shape, mask.squeeze().cpu().numpy().shape)
                         plot_all(
                             image=image.permute(1, 2, 0).cpu().numpy(),
                             label=region.cpu().numpy(),
@@ -288,11 +462,13 @@ class AUCInferencer(L.LightningModule):
                             score=99,
                             point_coords=self.accumulated_coords,
                             point_labels=self.accumulated_labels,
-                            i=count_pred  # Pass the index to the plot_all function
+                            i=count_pred,  # Pass the index to the plot_all function
+                            batch_idx=batch_idx,
+                            process_func=process_func,
+                            model_idx=self.model_idx
                         )
                         count_pred += 1
                         
-                        # region = torch.tensor(diff).to(self.device)
                         point_type = new_point_type
                     point_type = 'positive'
                     self.set_points()
@@ -467,26 +643,6 @@ class AUCInferencer(L.LightningModule):
         negative_points = np.array(negative_points)
 
         return point_coords_positives, negative_points
-        
-        # Ordenar os pontos negativos para ter exatamente num_points_negative, espaçados e começando pelo centro
-        if negative_points.shape[0] > 0:
-            white_pixels = np.argwhere(region == 1)  # (y, x)
-            overall_center = np.array([np.mean(white_pixels[:, 1]), np.mean(white_pixels[:, 0])])  # (x, y)
-            angles = np.arctan2(negative_points[:, 1] - overall_center[1],
-                                negative_points[:, 0] - overall_center[0])
-            sorted_indices = np.argsort(angles)
-            sorted_points = negative_points[sorted_indices]
-            sorted_angles = angles[sorted_indices]
-            start = np.argmin(np.abs(sorted_angles))
-            reordered_points = np.roll(sorted_points, -start, axis=0)
-            M = reordered_points.shape[0]
-            if M >= num_points_negative:
-                sample_indices = np.linspace(0, M - 1, num_points_negative, dtype=int)
-                negative_points = reordered_points[sample_indices]
-            else:
-                negative_points = reordered_points
-
-        return point_coords_positives, negative_points
     
     """ version 1 (calculate the center of region, interativaly with model) """
     def calculate_center_region(self, region: np.array, point_type: str, min_distance: int = 10):
@@ -590,19 +746,7 @@ class AUCInferencer(L.LightningModule):
         area_outward = np.sum(mask_outward)
         area_inward = np.sum(mask_inward)
 
-        diff_binary = teste1 = teste2 = np.zeros(label.shape, dtype=np.uint8) # [H,W]
-
-        # fig, axes = plt.subplots(1, 2, figsize=(15, 5))
-        # teste1[mask_outward] = 1
-        # axes[0].imshow(teste1)
-        # axes[0].set_title('Image 1')
-        # axes[0].axis('off')
-        # teste2[mask_inward] = 1
-        # axes[1].imshow(teste2)
-        # axes[1].set_title('Image 2')
-        # axes[1].axis('off')
-        # plt.tight_layout()
-        # plt.show()
+        diff_binary = np.zeros(label.shape, dtype=np.uint8) # [H,W]
 
         # Comparar as áreas
         if area_outward > area_inward:
@@ -623,5 +767,19 @@ class AUCInferencer(L.LightningModule):
         **kwargs):
         """ Static method to run AUC Inferencer """
         calculator = AUCInferencer(model, data_module, **kwargs)
+
+        # calculates the grad-cam
+        print(f"***** Using methodology process_v{kwargs['using_methodology']} *****")
+        for batch_idx, batch in enumerate(tqdm(calculator.dataloader, desc="Processing Grad-CAM in batches")):
+            # apply grad-cam only specific images
+            if batch_idx == 0 or batch_idx == 199:
+                if kwargs['using_methodology'] == 1:
+                    calculator.process_v1(batch=batch, batch_idx=batch_idx, process_func="process_v1", exec_grad=True)
+                elif kwargs['using_methodology'] == 2:
+                    calculator.process_v2(batch=batch, batch_idx=batch_idx, process_func="process_v2", exec_grad=True)
+                else:
+                    raise ValueError(f"Informe um valor no parametro using_methodology. Pode ser 1 ou 2.")
+
+        # calculates the inference
         trainer = L.Trainer(accelerator=accelerator, devices=[devices])
-        trainer.test(calculator)
+        return trainer.predict(calculator)

@@ -1,39 +1,14 @@
 import os
 import numpy as np
-import math
 import traceback
-from tqdm import tqdm
 import torch
 import lightning as L
 from minerva.models.loaders import FromPretrained
-from minerva.utils.typing import PathLike
 from typing import Tuple
 from pathlib import Path
 from common import get_data_module
 from init_experiment import init_sam
 from auc_inferencer import AUCInferencer
-
-# def evaluate_experiment_2(model, data_module):
-#     with torch.no_grad():
-#         data_module.setup(stage='predict')
-#         for batch_idx, batch in enumerate(tqdm(data_module.predict_dataloader(), desc="Processando batches")):
-#             data = []
-#             for sample_idx in range(len(batch[0])):
-#                 image = batch[0][sample_idx]
-#                 label = batch[1][sample_idx]
-
-                
-#                 data.append(
-#                     {
-#                         "image": image,
-#                         "label": label,
-#                         "original_size": (
-#                             batch[0][sample_idx].shape[1],
-#                             batch[0][sample_idx].shape[2],
-#                         ),
-#                     }
-#                 )
-#             batch = data
 
 def load_model(model, ckpt):
     return FromPretrained(model, ckpt, strict=False)
@@ -116,7 +91,9 @@ def perform_inference(
         seed:int = 42,
         single_channel:bool = False,
         accelerator: str = "gpu",
-        devices: int = 0
+        devices: int = 0,
+        using_methodology: int = 2,
+        model_idx: str = "model_name"
         ):
     model_info = load_model_and_data_module(
         root_data_dir=root_data_dir,
@@ -140,9 +117,11 @@ def perform_inference(
         data_module=model_info["data_module"],
         accelerator=accelerator,
         devices=devices,
-        num_points=num_points)
-    print("teste 1")
-    exit()
+        num_points=num_points,
+        using_methodology=using_methodology,
+        model_idx=model_idx
+        )
+    
     # if model_info['model_name'] == "sam_vit_b_experiment_1":
     #     trainer = L.Trainer(
     #         accelerator=accelerator,
@@ -163,6 +142,10 @@ def perform_inference(
     # at this moment, it need to be 1 because of differences 
     # of number of samples into batches: before apply torch.stack(predictions, dim=0) 
     # is need get all predictions separately.
+
+    predictions = [p for p in predictions if p is not None]
+    predictions = [p if isinstance(p, torch.Tensor) else torch.tensor(p) for p in predictions]
+    
     predictions = torch.stack(predictions, dim=0) # type: ignore
     predictions = predictions.squeeze()
     predictions = predictions.float().cpu().numpy()
@@ -174,7 +157,6 @@ def perform_inference(
 def main():
     root_data_dir = "/workspaces/Minerva-Discovery/shared_data/seam_ai_datasets/seam_ai/images"
     root_annotation_dir = "/workspaces/Minerva-Discovery/shared_data/seam_ai_datasets/seam_ai/annotations"
-    ckpt_file = "/workspaces/Minerva-Discovery/shared_data/weights_sam/checkpoints_sam/sam_vit_b_01ec64.pth"
     img_shape = (1006, 590)
     batch_size = 1 # TODO: batch_size, in this case, need to be 1 because of differences of number of samples into batches: before apply torch.stack(predictions, dim=0) is need get all predictions separately.
     seed = 42
@@ -182,13 +164,16 @@ def main():
     devices = 0
     single_channel = False
     num_points = 10
+    using_methodology = 1 # 1 for use process_v1() or 2 for use process_v2()
     
     finetuned_models_path = Path.cwd() / "tmp" / "logs"
     
     for path in finetuned_models_path.iterdir():
         if path.is_dir():
-            predictions_path = Path.cwd() / "tmp" / "predictions" / path.name
+            predictions_path = Path.cwd() / "tmp" / "predictions" / f"methodology_{using_methodology}" / path.name
             predictions_path.mkdir(parents=True, exist_ok=True)
+
+            ckpt_file = f"/workspaces/Minerva-Discovery/my_experiments/sam_original/evaluate_experiments/parihaka/tmp/logs/{path.name}/seam_ai/checkpoints/last.ckpt"
 
             try:
                 if path.name == "sam_vit_b_experiment_1":
@@ -200,13 +185,17 @@ def main():
                             "apply_adapter": {}
                         },
                         num_classes=6,
-                        return_prediction_only=True)
+                        return_prediction_only=True,
+                        apply_load_from_checkpoint=True
+                    )
                 elif path.name == "sam_vit_b_experiment_2":
                     model_instantiator_func = init_sam(
                         model_name=path.name,
                         ckpt_file=ckpt_file,
                         num_classes=3,
-                        return_prediction_only=True)
+                        return_prediction_only=True,
+                        apply_load_from_checkpoint=True
+                    )
                 elif path.name == "sam_vit_b_experiment_3":
                     model_instantiator_func = init_sam(
                         model_name=path.name,
@@ -215,7 +204,21 @@ def main():
                             "apply_freeze": {"image_encoder": False, "prompt_encoder": False, "mask_decoder": False},
                         },
                         num_classes=3,
-                        return_prediction_only=True)
+                        return_prediction_only=True,
+                        apply_load_from_checkpoint=True
+                    )
+                elif path.name == "sam_vit_b_experiment_4":
+                    model_instantiator_func = init_sam(
+                        model_name=path.name,
+                        ckpt_file=ckpt_file,
+                        another_args={
+                            "apply_freeze": {"prompt_encoder": False, "image_encoder": False, "mask_decoder": False},
+                            "apply_adapter": {}
+                        },
+                        num_classes = 3,
+                        return_prediction_only=True,
+                        apply_load_from_checkpoint=True
+                    )
                 else:
                     raise ValueError(f"Unknown model: {path.name}")
                 
@@ -239,7 +242,9 @@ def main():
                     seed=seed,
                     single_channel=single_channel,
                     accelerator=accelerator,
-                    devices=devices
+                    devices=devices,
+                    using_methodology=using_methodology,
+                    model_idx=path.name
                 )
             except Exception as e:
                 traceback.print_exc()
