@@ -151,7 +151,7 @@ def main():
     devices = 0
     single_channel = False
     num_points = 10
-    using_methodology = 1 # 1 for use process_v1() or 2 for use process_v2()
+    using_methodology = 2 # 1 for use process_v1() or 2 for use process_v2()
     evaluate_this_samples = [0, 199]
     
     finetuned_models_path = Path.cwd() / "tmp" / "logs"

@@ -211,38 +211,6 @@ def plot_result_batch_preds(
             plt.savefig(output_path)
             plt.close()
 
-def generate_single_image(image_array, output_path):
-    # label_cmap = ListedColormap([
-    #     [0.294, 0.439, 0.733],
-    #     [0.588, 0.761, 0.867],
-    #     [0.890, 0.965, 0.976],
-    #     [0.980, 0.875, 0.467],
-    #     [0.961, 0.471, 0.294],
-    #     [0.847, 0.157, 0.141],
-    #     [1.0, 0.753, 0.796],  # background
-    # ])
-    
-    # # Ajustar níveis de cinza (reduzir todos em 1, exceto fundo)
-    # adjusted_image = np.where(image_array == 7, 7, image_array - 1)
-    
-    # # Garantir que os valores estão no intervalo correto
-    # unique_values = np.unique(adjusted_image)
-    # if not np.all(np.isin(unique_values, [0, 1, 2, 3, 4, 5, 7])):
-    #     raise ValueError("A imagem contém valores fora do intervalo permitido (0 a 5 ou 7).")
-    
-    # Criar diretório de saída se não existir
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    
-    # Gerar a imagem
-    plt.figure(figsize=(5, 5))
-    plt.imshow(image_array, cmap="gray", vmin=0, vmax=6)
-    plt.axis('off')
-    plt.savefig(output_path, bbox_inches='tight', pad_inches=0)
-    plt.close()
-    
-    print(f"Imagem salva em: {output_path}")
-    return output_path
-
 def save_grayscale_image(image_array, output_path):
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     plt.imsave(output_path, image_array, cmap="gray")
@@ -405,18 +373,15 @@ class AUCInferencer(L.LightningModule):
 
                         outputs = self.forward([batch])
                         mask = (outputs > 0.0).float() # remover isso depois
-                        
-                        # Accumulate the predictions for the current facie
-                        # point_preds[point] = mask * (facie + 1)
-                        # point_preds[point] = torch.where(mask, facie, torch.zeros_like(mask)).squeeze()
-                        point_preds[point] = torch.where(mask.bool(), facie, torch.full_like(mask, 7, dtype=facie.dtype)).squeeze()
-                        # point_preds[point] = torch.where(mask, facie, torch.full_like(mask, 7)).squeeze() # (mask.float() * (1+facie)).squeeze()
-                        # print(torch.unique(mask), torch.unique(point_preds[point]))
 
                         # calculate IoU
                         gt_tensor = torch.tensor(real_label, dtype=torch.float32, device=self.model.device)  # Ground truth
                         pred_tensor = mask.squeeze(0).squeeze(0)  # Remover dimensões extras
                         iou_score = self.miou_metric(pred_tensor, gt_tensor)
+
+                        # Accumulate the predictions for the current facie
+                        prediction_value = torch.where(mask.bool(), facie, torch.full_like(mask, 7, dtype=facie.dtype)).squeeze()
+                        point_preds[point] = (prediction_value, iou_score.item())
 
                         # the difference need to be between real label and pred, beacause the difference needs a reference (real label)
                         diff, new_point_type = self.calculate_diff_label_pred(label=real_label.cpu().numpy(), pred=mask.squeeze().cpu().numpy())
@@ -443,49 +408,42 @@ class AUCInferencer(L.LightningModule):
                         point_type = new_point_type
                     point_type = 'positive'
                     self.set_points()
-                    # print("point_preds[0] uniques: ", torch.unique(point_preds[0]))
-                    # print("point_preds[4] uniques: ", torch.unique(point_preds[4]))
-                    # print("point_preds[9] uniques: ", torch.unique(point_preds[9]))
-                    # print("-"*20)
                     facie_preds.append(point_preds)
                     # break
                     # exit()
-                # print(len(facie_preds), len(facie_preds[0]), len(*facie_preds))
-                # combined_preds = self.agrupar_imagens_facies(facie_preds)
-                # print("combined_preds: ", len(combined_preds))
-                # for i, img in enumerate(combined_preds):
-                #     print(f"point_preds[{i}] uniques: ", torch.unique(img))
-                #     print(f"shape do fela {i}: ", img.cpu().numpy().shape)
-                    # generate_single_image(img.cpu().numpy(), f"test/imagem_agrupada_{i}.png")
-                    # vutils.save_image(img, f"imagem_agrupada_{i}.png")
-                # exit()
+                
+                # calculate GRAD-CAM
+                if exec_grad:
+                    return None
+                
                 # Transpõe a lista para agrupar as predições de cada ponto
                 transposed_preds = list(zip(*facie_preds))
                 combined_preds = []
                 # Mescla as predições usando prioridade condicional: o valor do pixel só é substituído se o novo valor não for fundo (7)
-                for group in transposed_preds:
-                    merged = group[0]
-                    for pred in group[1:]:
-                        merged = torch.where(pred != 7, pred, merged)
+                for i, group in enumerate(transposed_preds):
+                    # group é uma tupla de (mask, iou) de cada facie para o mesmo ponto
+                    # Empilha as máscaras: shape (n, H, W)
+                    candidate_masks = torch.stack([pred[0] for pred in group], dim=0)
+                    # Cria um tensor de IoU para cada predição: shape (n, 1, 1)
+                    candidate_ious = torch.tensor([pred[1] for pred in group], device=candidate_masks.device).view(-1, 1, 1)
+
+                    # Se a máscara for fundo (valor 7), defina o IoU como -infinito para que não seja selecionada
+                    candidate_ious = torch.where(candidate_masks != 7, candidate_ious, torch.tensor(float('-inf'), device=candidate_masks.device))
+
+                    # Para cada pixel, identifica qual candidato tem o maior IoU
+                    max_idx = candidate_ious.argmax(dim=0)  # shape (H, W)
+                    # Usa o índice para selecionar o valor correspondente na máscara
+                    merged = candidate_masks.gather(0, max_idx.unsqueeze(0)).squeeze(0)
+
+                    # Caso o maior IoU seja -infinito, significa que nenhum candidato era válido (todos fundo)
+                    max_ious = candidate_ious.max(dim=0).values
+                    merged = torch.where(max_ious == float('-inf'), torch.full_like(merged, 7), merged)
                     combined_preds.append(merged)
+                    
                 combined_preds = torch.stack(combined_preds, dim=0)
                 batch_preds.append(combined_preds)
             batch_preds = torch.stack(batch_preds, dim=0)
             return batch_preds
-    
-    # def agrupar_imagens_facies(self, facie_preds):
-    #     """ retorna basicamente as imagens agrupadas dos pontos para aquele batch """
-    #     num_facies = len(facie_preds)  # Número de fácies (4)
-    #     num_imagens = len(facie_preds[0])  # Número de imagens por fácie (10)
-        
-    #     imagens_agrupadas = []
-        
-    #     for i in range(num_imagens):  # Para cada posição (0 a 9)
-    #         imagens = [facie_preds[f][i] for f in range(num_facies)]  # Pegamos a i-ésima imagem de cada fácie
-    #         imagens_empilhadas = torch.cat(imagens, dim=1)  # Empilhamos verticalmente (concatenamos no eixo das linhas)
-    #         imagens_agrupadas.append(imagens_empilhadas)
-        
-    #     return imagens_agrupadas
 
     """ version 2 """
     def process_v2(self, batch, batch_idx, process_func, exec_grad:bool=False, target_layer:str="model.mask_decoder.output_upscaling.3"):
@@ -596,23 +554,18 @@ class AUCInferencer(L.LightningModule):
                             )
                             continue # only for calculate grad-cam
 
-                        # calculate Rollout Attention (TODO)
-
                         # Executing prediction
                         outputs = self.forward([batch])
                         mask = (outputs > 0.0).float() # remover isso depois
-                        
-                        # Accumulate the predictions for the current facie
-                        # point_preds[point] = mask * (facie + 1)
-                        # point_preds[point] = torch.where(mask, facie, torch.zeros_like(mask)).squeeze()
-                        point_preds[point] = torch.where(mask.bool(), facie, torch.full_like(mask, 7, dtype=facie.dtype)).squeeze()
-                        # point_preds[point] = torch.where(mask, facie, torch.full_like(mask, 7)).squeeze() # (mask.float() * (1+facie)).squeeze()
-                        # print(torch.unique(mask), torch.unique(point_preds[point]))
 
                         # calculate IoU
                         gt_tensor = torch.tensor(region, dtype=torch.float32, device=self.model.device)  # Ground truth
                         pred_tensor = mask.squeeze(0).squeeze(0)  # Remover dimensões extras
                         iou_score = self.miou_metric(pred_tensor, gt_tensor)
+
+                        # Accumulate the predictions for the current facie
+                        prediction_value = torch.where(mask.bool(), facie, torch.full_like(mask, 7, dtype=facie.dtype)).squeeze()
+                        point_preds[point] = (prediction_value, iou_score.item())
 
                         # the difference need to be between real label and pred, beacause the difference needs a reference (real label)
                         diff, new_point_type = self.calculate_diff_label_pred(label=region.cpu().numpy(), pred=mask.squeeze().cpu().numpy())
@@ -640,15 +593,35 @@ class AUCInferencer(L.LightningModule):
                     self.set_points()
                     facie_preds.append(point_preds)
                     # break
+                
+                # calculate GRAD-CAM
+                if exec_grad:
+                    return None
+                        
                 # Transpõe a lista para agrupar as predições de cada ponto
                 transposed_preds = list(zip(*facie_preds))
                 combined_preds = []
                 # Mescla as predições usando prioridade condicional: o valor do pixel só é substituído se o novo valor não for fundo (7)
-                for group in transposed_preds:
-                    merged = group[0]
-                    for pred in group[1:]:
-                        merged = torch.where(pred != 7, pred, merged)
+                for i, group in enumerate(transposed_preds):
+                    # group é uma tupla de (mask, iou) de cada facie para o mesmo ponto
+                    # Empilha as máscaras: shape (n, H, W)
+                    candidate_masks = torch.stack([pred[0] for pred in group], dim=0)
+                    # Cria um tensor de IoU para cada predição: shape (n, 1, 1)
+                    candidate_ious = torch.tensor([pred[1] for pred in group], device=candidate_masks.device).view(-1, 1, 1)
+
+                    # Se a máscara for fundo (valor 7), defina o IoU como -infinito para que não seja selecionada
+                    candidate_ious = torch.where(candidate_masks != 7, candidate_ious, torch.tensor(float('-inf'), device=candidate_masks.device))
+
+                    # Para cada pixel, identifica qual candidato tem o maior IoU
+                    max_idx = candidate_ious.argmax(dim=0)  # shape (H, W)
+                    # Usa o índice para selecionar o valor correspondente na máscara
+                    merged = candidate_masks.gather(0, max_idx.unsqueeze(0)).squeeze(0)
+
+                    # Caso o maior IoU seja -infinito, significa que nenhum candidato era válido (todos fundo)
+                    max_ious = candidate_ious.max(dim=0).values
+                    merged = torch.where(max_ious == float('-inf'), torch.full_like(merged, 7), merged)
                     combined_preds.append(merged)
+                    
                 combined_preds = torch.stack(combined_preds, dim=0)
                 batch_preds.append(combined_preds)
             batch_preds = torch.stack(batch_preds, dim=0)
@@ -940,13 +913,15 @@ class AUCInferencer(L.LightningModule):
             print(f"***** Using methodology process_v{kwargs['using_methodology']} *****")
             for batch_idx, batch in enumerate(tqdm(calculator.dataloader, desc="Processing Grad-CAM in batches")):
                 # apply grad-cam only specific images
-                if batch_idx == 0 or batch_idx == 199:
-                    if kwargs['using_methodology'] == 1:
-                        calculator.process_v1(batch=batch, batch_idx=batch_idx, process_func="process_v1", exec_grad=True)
-                    elif kwargs['using_methodology'] == 2:
-                        calculator.process_v2(batch=batch, batch_idx=batch_idx, process_func="process_v2", exec_grad=True)
-                    else:
-                        raise ValueError(f"Informe um valor no parametro using_methodology. Pode ser 1 ou 2.")
+                for sample in kwargs['evaluate_this_samples']:
+                    if batch_idx == sample:
+                    # if batch_idx == 0 or batch_idx == 199:
+                        if kwargs['using_methodology'] == 1:
+                            calculator.process_v1(batch=batch, batch_idx=batch_idx, process_func="process_v1", exec_grad=True)
+                        elif kwargs['using_methodology'] == 2:
+                            calculator.process_v2(batch=batch, batch_idx=batch_idx, process_func="process_v2", exec_grad=True)
+                        else:
+                            raise ValueError(f"Informe um valor no parametro using_methodology. Pode ser 1 ou 2.")
 
         # calculates the inference
         trainer = L.Trainer(accelerator=accelerator, devices=[devices])
