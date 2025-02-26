@@ -32,7 +32,7 @@ class GradCAM:
     
     def generate_cam(self, batch, label, backward_aproach:int = 1):
         # Ensure the model is in training mode
-        self.model.train()
+        self.model.eval()
 
         # Move batch and label to GPU
         batch['image'] = batch['image'].to(self.device)
@@ -87,4 +87,4 @@ class GradCAM:
         cam = cv2.resize(cam, (width, height))
         cam = cam - np.min(cam)
         cam = cam / np.max(cam)
-        return cam
+        return cam, output

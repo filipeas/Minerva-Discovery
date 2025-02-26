@@ -93,7 +93,8 @@ def perform_inference(
         accelerator: str = "gpu",
         devices: int = 0,
         using_methodology: int = 2,
-        model_idx: str = "model_name"
+        model_idx: str = "model_name",
+        evaluate_this_samples: list = [0, 199]
         ):
     model_info = load_model_and_data_module(
         root_data_dir=root_data_dir,
@@ -119,24 +120,10 @@ def perform_inference(
         devices=devices,
         num_points=num_points,
         using_methodology=using_methodology,
-        model_idx=model_idx
+        model_idx=model_idx,
+        execute_only_predictions=False,
+        evaluate_this_samples=evaluate_this_samples
         )
-    
-    # if model_info['model_name'] == "sam_vit_b_experiment_1":
-    #     trainer = L.Trainer(
-    #         accelerator=accelerator,
-    #         devices=devices,
-    #         logger=False,
-    #         max_epochs=1,
-    #         enable_checkpointing=False,
-    #     )
-    #     predictions = trainer.predict(
-    #         model_info["model"], model_info["data_module"]
-    #     )
-    # elif model_info['model_name'] == "sam_vit_b_experiment_2":
-    #     predictions = evaluate_experiment_2(model_info["model"], model_info["data_module"])
-    # elif model_info['model_name'] == "sam_vit_b_experiment_3":
-    #     return None
 
     # TODO: batch_size not be need to be 1 in all time. 
     # at this moment, it need to be 1 because of differences 
@@ -165,6 +152,7 @@ def main():
     single_channel = False
     num_points = 10
     using_methodology = 1 # 1 for use process_v1() or 2 for use process_v2()
+    evaluate_this_samples = [0, 199]
     
     finetuned_models_path = Path.cwd() / "tmp" / "logs"
     
@@ -244,7 +232,8 @@ def main():
                     accelerator=accelerator,
                     devices=devices,
                     using_methodology=using_methodology,
-                    model_idx=path.name
+                    model_idx=path.name,
+                    evaluate_this_samples=evaluate_this_samples
                 )
             except Exception as e:
                 traceback.print_exc()

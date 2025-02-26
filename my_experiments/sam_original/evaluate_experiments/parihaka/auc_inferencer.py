@@ -13,8 +13,25 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from grad_cam import GradCAM
+from typing import Optional
+import torchvision.utils as vutils
 
-def plot_all(image, label, pred=None, diff=None, score=None, point_coords=None, point_labels=None, cam=None, i=0, batch_idx=0, process_func='', sugest_filename="sample_pred_all", model_idx="model_name"):
+def plot_all(
+        image, 
+        label, 
+        pred=None, 
+        diff=None, 
+        score=None, 
+        point_coords=None, 
+        point_labels=None, 
+        cam=None, 
+        i=0, 
+        batch_idx=0, 
+        process_func='', 
+        sugest_filename="sample_pred_all", 
+        model_idx="model_name", 
+        using_methodology=1
+):
     """
     Plota as imagens lado a lado: imagem original, label, predição (opcional), diff (opcional) e Grad-CAM (opcional).
     Pontos acumulados são exibidos sobre as imagens.
@@ -91,13 +108,22 @@ def plot_all(image, label, pred=None, diff=None, score=None, point_coords=None, 
                 ax.scatter(x, y, color=color, s=50, edgecolors='white')
 
     plt.tight_layout()
-    os.makedirs(f"tmp/debug_region/{model_idx}/{process_func}/{batch_idx}", exist_ok=True)
+    os.makedirs(f"tmp/debug_region/methodology_{using_methodology}/{model_idx}/{process_func}/{batch_idx}", exist_ok=True)
     filename = f"{sugest_filename}_{i}"  # Nome do arquivo
-    output_path = f"tmp/debug_region/{model_idx}/{process_func}/{batch_idx}/{filename}.png"
+    output_path = f"tmp/debug_region/methodology_{using_methodology}/{model_idx}/{process_func}/{batch_idx}/{filename}.png"
     plt.savefig(output_path)
     plt.close()
 
-def plot_facie_with_prompts(facie_idx, point_coords_positive, point_coords_negative, region, batch_idx, process_func, model_idx="model_name"):
+def plot_facie_with_prompts(
+        facie_idx, 
+        point_coords_positive, 
+        point_coords_negative, 
+        region, 
+        batch_idx, 
+        process_func, 
+        model_idx="model_name", 
+        using_methodology=1
+):
     # Verificar se a imagem 'region' está em escala de cinza (preto e branco)
     if region.ndim != 2:
         raise ValueError("A imagem 'region' deve ser uma imagem em preto e branco (escala de cinza).")
@@ -119,12 +145,18 @@ def plot_facie_with_prompts(facie_idx, point_coords_positive, point_coords_negat
     ax.scatter(coords_negative[:, 0], coords_negative[:, 1], c='red', marker='o', s=25)
 
     # Salvar a imagem
-    os.makedirs(f"tmp/debug_region/{model_idx}/{process_func}/{batch_idx}", exist_ok=True)
-    output_path = f"tmp/debug_region/{model_idx}/{process_func}/{batch_idx}/image_facie_{facie_idx}_with_coordinates.png"
+    os.makedirs(f"tmp/debug_region/methodology_{using_methodology}/{model_idx}/{process_func}/{batch_idx}", exist_ok=True)
+    output_path = f"tmp/debug_region/methodology_{using_methodology}/{model_idx}/{process_func}/{batch_idx}/image_facie_{facie_idx}_with_coordinates.png"
     plt.savefig(output_path)
     plt.close()
 
-def plot_result_batch_preds(batch_preds, batch_idx, process_func, model_idx="model_name"):
+def plot_result_batch_preds(
+        batch_preds, 
+        batch_idx, 
+        process_func, 
+        model_idx="model_name",
+        using_methodology=1
+):
     label_cmap = ListedColormap(
         [
             [0.29411764705882354, 0.4392156862745098, 0.7333333333333333],
@@ -174,10 +206,47 @@ def plot_result_batch_preds(batch_preds, batch_idx, process_func, model_idx="mod
 
             plt.suptitle(f'Sample {sample_idx} - Prompt {prompt_idx}')
 
-            os.makedirs(f"tmp/debug_region/{model_idx}/{process_func}/{batch_idx}", exist_ok=True)
-            output_path = f"tmp/debug_region/{model_idx}/{process_func}/{batch_idx}/sample_{sample_idx}_prompt_{prompt_idx}.png"
+            os.makedirs(f"tmp/debug_region/methodology_{using_methodology}/{model_idx}/{process_func}/{batch_idx}", exist_ok=True)
+            output_path = f"tmp/debug_region/methodology_{using_methodology}/{model_idx}/{process_func}/{batch_idx}/sample_{sample_idx}_prompt_{prompt_idx}.png"
             plt.savefig(output_path)
             plt.close()
+
+def generate_single_image(image_array, output_path):
+    # label_cmap = ListedColormap([
+    #     [0.294, 0.439, 0.733],
+    #     [0.588, 0.761, 0.867],
+    #     [0.890, 0.965, 0.976],
+    #     [0.980, 0.875, 0.467],
+    #     [0.961, 0.471, 0.294],
+    #     [0.847, 0.157, 0.141],
+    #     [1.0, 0.753, 0.796],  # background
+    # ])
+    
+    # # Ajustar níveis de cinza (reduzir todos em 1, exceto fundo)
+    # adjusted_image = np.where(image_array == 7, 7, image_array - 1)
+    
+    # # Garantir que os valores estão no intervalo correto
+    # unique_values = np.unique(adjusted_image)
+    # if not np.all(np.isin(unique_values, [0, 1, 2, 3, 4, 5, 7])):
+    #     raise ValueError("A imagem contém valores fora do intervalo permitido (0 a 5 ou 7).")
+    
+    # Criar diretório de saída se não existir
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
+    # Gerar a imagem
+    plt.figure(figsize=(5, 5))
+    plt.imshow(image_array, cmap="gray", vmin=0, vmax=6)
+    plt.axis('off')
+    plt.savefig(output_path, bbox_inches='tight', pad_inches=0)
+    plt.close()
+    
+    print(f"Imagem salva em: {output_path}")
+    return output_path
+
+def save_grayscale_image(image_array, output_path):
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    plt.imsave(output_path, image_array, cmap="gray")
+
 class AUCInferencer(L.LightningModule):
     def __init__(
             self, 
@@ -187,7 +256,9 @@ class AUCInferencer(L.LightningModule):
             multimask_output: bool = False, 
             num_points: int = 3,
             using_methodology: int = 2,
-            model_idx: str = "model_name"
+            model_idx: str = "model_name",
+            execute_only_predictions: bool = False,
+            evaluate_this_samples: Optional[list] = None
             ):
         super().__init__()
         self.model = model
@@ -201,6 +272,8 @@ class AUCInferencer(L.LightningModule):
 
         self.using_methodology = using_methodology # select what methodology to use
         self.model_idx = model_idx # for create a folder with experiments using this model
+        self.execute_only_predictions = execute_only_predictions # for execute only predictions (no plots)
+        self.evaluate_this_samples = evaluate_this_samples
     
     def set_points(self):
         """ Teset the accumulated points """
@@ -211,28 +284,37 @@ class AUCInferencer(L.LightningModule):
         """ Make inference with model """
         return self.model(batch, multimask_output=self.multimask_output)
     
-    def predict_step(self, batch, batch_idx):
-        """ Test step to use Trainer.test() """
-        # if batch_idx == 0 or batch_idx == 199: # test
+    def execute_prediction(self, batch, batch_idx):
         if self.using_methodology == 1:
             batch_preds = self.process_v1(batch, batch_idx, "process_v1")
-            plot_result_batch_preds(batch_preds=batch_preds, batch_idx=batch_idx, process_func="process_v1", model_idx=self.model_idx) # plot results
+            if not self.execute_only_predictions:
+                plot_result_batch_preds(batch_preds=batch_preds, batch_idx=batch_idx, process_func="process_v1", model_idx=self.model_idx, using_methodology=self.using_methodology) # plot results
         elif self.using_methodology == 2:
             batch_preds = self.process_v2(batch, batch_idx, "process_v2")
-            plot_result_batch_preds(batch_preds=batch_preds, batch_idx=batch_idx, process_func="process_v2", model_idx=self.model_idx) # plot results
+            if not self.execute_only_predictions:
+                plot_result_batch_preds(batch_preds=batch_preds, batch_idx=batch_idx, process_func="process_v2", model_idx=self.model_idx, using_methodology=self.using_methodology) # plot results
         else:
             raise ValueError(f"Informe um valor no parametro using_methodology. Pode ser 1 ou 2.")
         
         # print(batch_preds.shape, type(batch_preds))
         # exit()
-
         return batch_preds
+    
+    def predict_step(self, batch, batch_idx):
+        """ Test step to use Trainer.test() """
+
+        if self.evaluate_this_samples != None:
+            for sample in self.evaluate_this_samples:
+                if batch_idx == sample:
+                    return self.execute_prediction(batch, batch_idx)
+        else:
+            return self.execute_prediction(batch, batch_idx)
     
     def predict_dataloader(self):
         return self.dataloader
     
     """ version 1 """
-    def process_v1(self, batch, batch_idx, process_func, exec_grad:bool=False, target_layer:str="model.image_encoder.neck.2"):
+    def process_v1(self, batch, batch_idx, process_func, exec_grad:bool=False, target_layer:str="model.mask_decoder.output_upscaling.3"):
         """ Process the batch sended by test_step """
         
         # processing default dataset of minerva
@@ -274,7 +356,7 @@ class AUCInferencer(L.LightningModule):
 
                         batch = {
                             'image': image,
-                            'label': label,
+                            'label': real_label,
                             'original_size': (int(image.shape[1]), int(image.shape[2])),
                             'point_coords': point_coords_tensor,
                             'point_labels': point_labels_tensor
@@ -284,11 +366,31 @@ class AUCInferencer(L.LightningModule):
                         if exec_grad:
                             # print(f"Executing Grad-CAM in {target_layer}")
                             grad_cam = GradCAM(model=self.model, target_layer=target_layer)
-                            cam = grad_cam.generate_cam(batch=batch, label=region, backward_aproach=2)
+                            cam, output_pred = grad_cam.generate_cam(batch=batch, label=real_label, backward_aproach=2)
+                            mask = (output_pred > 0.0).float()
+
+                            # Move all tensors to the same device
+                            device = mask.device
+                            gt_tensor = torch.tensor(real_label, dtype=torch.float32).to(device)  # Ground truth
+                            pred_tensor = mask.squeeze(0).squeeze(0)  # Remover dimensões extras
+
+                            # Ensure the metric is on the same device
+                            self.miou_metric = self.miou_metric.to(device)
+
+                            # calculate IoU
+                            iou_score = self.miou_metric(pred_tensor, gt_tensor)
+
+                            # the difference need to be between real label and pred, beacause the difference needs a reference (real label)
+                            diff, new_point_type = self.calculate_diff_label_pred(label=real_label.cpu().numpy(), pred=mask.squeeze().cpu().numpy())
+                            region = torch.tensor(diff).to(self.device)
+                            point_type = new_point_type
+
                             plot_all(
                                 image=image.permute(1, 2, 0).cpu().numpy(),
-                                label=region.cpu().numpy(),
-                                score=000,
+                                label=real_label.cpu().numpy(),
+                                pred=mask.squeeze().cpu().numpy(),
+                                diff=diff,
+                                score=iou_score,
                                 point_coords=self.accumulated_coords,
                                 point_labels=self.accumulated_labels,
                                 i=count_pred,  # Pass the index to the plot_all function
@@ -296,44 +398,67 @@ class AUCInferencer(L.LightningModule):
                                 process_func=process_func,
                                 cam=cam,
                                 sugest_filename=f"using_process_v1_pred_with_grad_cam_{target_layer}_backward_aproach_{2}_in_facie_{facie_idx}_using_{point}_points",
-                                model_idx=self.model_idx
+                                model_idx=self.model_idx,
+                                using_methodology=self.using_methodology
                             )
                             continue # only for calculate grad-cam
 
                         outputs = self.forward([batch])
-                        mask = outputs > 0.0 # remover isso depois
+                        mask = (outputs > 0.0).float() # remover isso depois
                         
                         # Accumulate the predictions for the current facie
+                        # point_preds[point] = mask * (facie + 1)
                         # point_preds[point] = torch.where(mask, facie, torch.zeros_like(mask)).squeeze()
-                        point_preds[point] = torch.where(mask, facie, torch.full_like(mask, 7, dtype=facie.dtype)).squeeze()
+                        point_preds[point] = torch.where(mask.bool(), facie, torch.full_like(mask, 7, dtype=facie.dtype)).squeeze()
                         # point_preds[point] = torch.where(mask, facie, torch.full_like(mask, 7)).squeeze() # (mask.float() * (1+facie)).squeeze()
                         # print(torch.unique(mask), torch.unique(point_preds[point]))
+
+                        # calculate IoU
+                        gt_tensor = torch.tensor(real_label, dtype=torch.float32, device=self.model.device)  # Ground truth
+                        pred_tensor = mask.squeeze(0).squeeze(0)  # Remover dimensões extras
+                        iou_score = self.miou_metric(pred_tensor, gt_tensor)
 
                         # the difference need to be between real label and pred, beacause the difference needs a reference (real label)
                         diff, new_point_type = self.calculate_diff_label_pred(label=real_label.cpu().numpy(), pred=mask.squeeze().cpu().numpy())
 
                         # print(region.cpu().numpy().shape, mask.squeeze().cpu().numpy().shape)
-                        plot_all(
-                            image=image.permute(1, 2, 0).cpu().numpy(),
-                            label=real_label.cpu().numpy(),
-                            pred=mask.squeeze().cpu().numpy(),
-                            diff=diff,
-                            score=99,
-                            point_coords=self.accumulated_coords,
-                            point_labels=self.accumulated_labels,
-                            i=count_pred,  # Pass the index to the plot_all function
-                            batch_idx=batch_idx,
-                            process_func=process_func,
-                            model_idx=self.model_idx
-                        )
+                        if not self.execute_only_predictions:
+                            plot_all(
+                                image=image.permute(1, 2, 0).cpu().numpy(),
+                                label=real_label.cpu().numpy(),
+                                pred=mask.squeeze().cpu().numpy(),
+                                diff=diff,
+                                score=iou_score.item(),
+                                point_coords=self.accumulated_coords,
+                                point_labels=self.accumulated_labels,
+                                i=count_pred,  # Pass the index to the plot_all function
+                                batch_idx=batch_idx,
+                                process_func=process_func,
+                                model_idx=self.model_idx,
+                                using_methodology=self.using_methodology
+                            )
                         count_pred += 1
                         
                         region = torch.tensor(diff).to(self.device)
                         point_type = new_point_type
                     point_type = 'positive'
                     self.set_points()
+                    # print("point_preds[0] uniques: ", torch.unique(point_preds[0]))
+                    # print("point_preds[4] uniques: ", torch.unique(point_preds[4]))
+                    # print("point_preds[9] uniques: ", torch.unique(point_preds[9]))
+                    # print("-"*20)
                     facie_preds.append(point_preds)
                     # break
+                    # exit()
+                # print(len(facie_preds), len(facie_preds[0]), len(*facie_preds))
+                # combined_preds = self.agrupar_imagens_facies(facie_preds)
+                # print("combined_preds: ", len(combined_preds))
+                # for i, img in enumerate(combined_preds):
+                #     print(f"point_preds[{i}] uniques: ", torch.unique(img))
+                #     print(f"shape do fela {i}: ", img.cpu().numpy().shape)
+                    # generate_single_image(img.cpu().numpy(), f"test/imagem_agrupada_{i}.png")
+                    # vutils.save_image(img, f"imagem_agrupada_{i}.png")
+                # exit()
                 # Transpõe a lista para agrupar as predições de cada ponto
                 transposed_preds = list(zip(*facie_preds))
                 combined_preds = []
@@ -348,8 +473,22 @@ class AUCInferencer(L.LightningModule):
             batch_preds = torch.stack(batch_preds, dim=0)
             return batch_preds
     
+    # def agrupar_imagens_facies(self, facie_preds):
+    #     """ retorna basicamente as imagens agrupadas dos pontos para aquele batch """
+    #     num_facies = len(facie_preds)  # Número de fácies (4)
+    #     num_imagens = len(facie_preds[0])  # Número de imagens por fácie (10)
+        
+    #     imagens_agrupadas = []
+        
+    #     for i in range(num_imagens):  # Para cada posição (0 a 9)
+    #         imagens = [facie_preds[f][i] for f in range(num_facies)]  # Pegamos a i-ésima imagem de cada fácie
+    #         imagens_empilhadas = torch.cat(imagens, dim=1)  # Empilhamos verticalmente (concatenamos no eixo das linhas)
+    #         imagens_agrupadas.append(imagens_empilhadas)
+        
+    #     return imagens_agrupadas
+
     """ version 2 """
-    def process_v2(self, batch, batch_idx, process_func, exec_grad:bool=False, target_layer:str="model.image_encoder.neck.2"):
+    def process_v2(self, batch, batch_idx, process_func, exec_grad:bool=False, target_layer:str="model.mask_decoder.output_upscaling.3"):
         """ Process the batch sended by test_step """
         
         # processing default dataset of minerva
@@ -386,7 +525,7 @@ class AUCInferencer(L.LightningModule):
                     
                     if not exec_grad:
                         # execute only if execute test
-                        plot_facie_with_prompts(facie_idx=facie_idx, point_coords_positive=point_coords_positive, point_coords_negative=point_coords_negative, region=region.cpu().numpy(), batch_idx=batch_idx, process_func=process_func, model_idx=self.model_idx)
+                        plot_facie_with_prompts(facie_idx=facie_idx, point_coords_positive=point_coords_positive, point_coords_negative=point_coords_negative, region=region.cpu().numpy(), batch_idx=batch_idx, process_func=process_func, model_idx=self.model_idx, using_methodology=self.using_methodology)
                     
                     pos_idx = 0
                     neg_idx = 0
@@ -411,7 +550,7 @@ class AUCInferencer(L.LightningModule):
 
                         batch = {
                             'image': image,
-                            'label': label,
+                            'label': region,
                             'original_size': (int(image.shape[1]), int(image.shape[2])),
                             'point_coords': point_coords_tensor,
                             'point_labels': point_labels_tensor
@@ -421,11 +560,30 @@ class AUCInferencer(L.LightningModule):
                         if exec_grad:
                             # print(f"Executing Grad-CAM in {target_layer}")
                             grad_cam = GradCAM(model=self.model, target_layer=target_layer)
-                            cam = grad_cam.generate_cam(batch=batch, label=region, backward_aproach=2)
+                            cam, output_pred = grad_cam.generate_cam(batch=batch, label=region, backward_aproach=2)
+                            mask = (output_pred > 0.0).float()
+
+                            # Move all tensors to the same device
+                            device = mask.device
+                            gt_tensor = torch.tensor(region, dtype=torch.float32).to(device)  # Ground truth
+                            pred_tensor = mask.squeeze(0).squeeze(0)  # Remover dimensões extras
+
+                            # Ensure the metric is on the same device
+                            self.miou_metric = self.miou_metric.to(device)
+
+                            # calculate IoU
+                            iou_score = self.miou_metric(pred_tensor, gt_tensor)
+
+                            # the difference need to be between real label and pred, beacause the difference needs a reference (real label)
+                            diff, new_point_type = self.calculate_diff_label_pred(label=region.cpu().numpy(), pred=mask.squeeze().cpu().numpy())
+                            point_type = new_point_type
+
                             plot_all(
                                 image=image.permute(1, 2, 0).cpu().numpy(),
                                 label=region.cpu().numpy(),
-                                score=000,
+                                pred=mask.squeeze().cpu().numpy(),
+                                diff=diff,
+                                score=iou_score,
                                 point_coords=self.accumulated_coords,
                                 point_labels=self.accumulated_labels,
                                 i=count_pred,  # Pass the index to the plot_all function
@@ -433,7 +591,8 @@ class AUCInferencer(L.LightningModule):
                                 process_func=process_func,
                                 cam=cam,
                                 sugest_filename=f"using_process_v2_pred_with_grad_cam_{target_layer}_backward_aproach_{2}_in_facie_{facie_idx}_using_{point}_points",
-                                model_idx=self.model_idx
+                                model_idx=self.model_idx,
+                                using_methodology=self.using_methodology
                             )
                             continue # only for calculate grad-cam
 
@@ -441,32 +600,39 @@ class AUCInferencer(L.LightningModule):
 
                         # Executing prediction
                         outputs = self.forward([batch])
-                        mask = outputs > 0.0  # Remove this later
-                        # print(outputs.shape, type(outputs))
+                        mask = (outputs > 0.0).float() # remover isso depois
                         
                         # Accumulate the predictions for the current facie
+                        # point_preds[point] = mask * (facie + 1)
                         # point_preds[point] = torch.where(mask, facie, torch.zeros_like(mask)).squeeze()
-                        point_preds[point] = torch.where(mask, facie, torch.full_like(mask, 7, dtype=facie.dtype)).squeeze()
+                        point_preds[point] = torch.where(mask.bool(), facie, torch.full_like(mask, 7, dtype=facie.dtype)).squeeze()
                         # point_preds[point] = torch.where(mask, facie, torch.full_like(mask, 7)).squeeze() # (mask.float() * (1+facie)).squeeze()
                         # print(torch.unique(mask), torch.unique(point_preds[point]))
+
+                        # calculate IoU
+                        gt_tensor = torch.tensor(region, dtype=torch.float32, device=self.model.device)  # Ground truth
+                        pred_tensor = mask.squeeze(0).squeeze(0)  # Remover dimensões extras
+                        iou_score = self.miou_metric(pred_tensor, gt_tensor)
 
                         # the difference need to be between real label and pred, beacause the difference needs a reference (real label)
                         diff, new_point_type = self.calculate_diff_label_pred(label=region.cpu().numpy(), pred=mask.squeeze().cpu().numpy())
 
                         # print(region.cpu().numpy().shape, mask.squeeze().cpu().numpy().shape)
-                        plot_all(
-                            image=image.permute(1, 2, 0).cpu().numpy(),
-                            label=region.cpu().numpy(),
-                            pred=mask.squeeze().cpu().numpy(),
-                            diff=diff,
-                            score=99,
-                            point_coords=self.accumulated_coords,
-                            point_labels=self.accumulated_labels,
-                            i=count_pred,  # Pass the index to the plot_all function
-                            batch_idx=batch_idx,
-                            process_func=process_func,
-                            model_idx=self.model_idx
-                        )
+                        if not self.execute_only_predictions:
+                            plot_all(
+                                image=image.permute(1, 2, 0).cpu().numpy(),
+                                label=region.cpu().numpy(),
+                                pred=mask.squeeze().cpu().numpy(),
+                                diff=diff,
+                                score=iou_score.item(),
+                                point_coords=self.accumulated_coords,
+                                point_labels=self.accumulated_labels,
+                                i=count_pred,  # Pass the index to the plot_all function
+                                batch_idx=batch_idx,
+                                process_func=process_func,
+                                model_idx=self.model_idx,
+                                using_methodology=self.using_methodology
+                            )
                         count_pred += 1
                         
                         point_type = new_point_type
@@ -764,21 +930,23 @@ class AUCInferencer(L.LightningModule):
         data_module:L.LightningDataModule,
         accelerator:str = "gpu",
         devices:int = 1,
-        **kwargs):
+        **kwargs
+    ):
         """ Static method to run AUC Inferencer """
         calculator = AUCInferencer(model, data_module, **kwargs)
 
         # calculates the grad-cam
-        print(f"***** Using methodology process_v{kwargs['using_methodology']} *****")
-        for batch_idx, batch in enumerate(tqdm(calculator.dataloader, desc="Processing Grad-CAM in batches")):
-            # apply grad-cam only specific images
-            if batch_idx == 0 or batch_idx == 199:
-                if kwargs['using_methodology'] == 1:
-                    calculator.process_v1(batch=batch, batch_idx=batch_idx, process_func="process_v1", exec_grad=True)
-                elif kwargs['using_methodology'] == 2:
-                    calculator.process_v2(batch=batch, batch_idx=batch_idx, process_func="process_v2", exec_grad=True)
-                else:
-                    raise ValueError(f"Informe um valor no parametro using_methodology. Pode ser 1 ou 2.")
+        if not kwargs['execute_only_predictions']:
+            print(f"***** Using methodology process_v{kwargs['using_methodology']} *****")
+            for batch_idx, batch in enumerate(tqdm(calculator.dataloader, desc="Processing Grad-CAM in batches")):
+                # apply grad-cam only specific images
+                if batch_idx == 0 or batch_idx == 199:
+                    if kwargs['using_methodology'] == 1:
+                        calculator.process_v1(batch=batch, batch_idx=batch_idx, process_func="process_v1", exec_grad=True)
+                    elif kwargs['using_methodology'] == 2:
+                        calculator.process_v2(batch=batch, batch_idx=batch_idx, process_func="process_v2", exec_grad=True)
+                    else:
+                        raise ValueError(f"Informe um valor no parametro using_methodology. Pode ser 1 ou 2.")
 
         # calculates the inference
         trainer = L.Trainer(accelerator=accelerator, devices=[devices])
