@@ -913,15 +913,15 @@ class AUCInferencer(L.LightningModule):
             print(f"***** Using methodology process_v{kwargs['using_methodology']} *****")
             for batch_idx, batch in enumerate(tqdm(calculator.dataloader, desc="Processing Grad-CAM in batches")):
                 # apply grad-cam only specific images
-                for sample in kwargs['evaluate_this_samples']:
-                    if batch_idx == sample:
-                    # if batch_idx == 0 or batch_idx == 199:
-                        if kwargs['using_methodology'] == 1:
-                            calculator.process_v1(batch=batch, batch_idx=batch_idx, process_func="process_v1", exec_grad=True)
-                        elif kwargs['using_methodology'] == 2:
-                            calculator.process_v2(batch=batch, batch_idx=batch_idx, process_func="process_v2", exec_grad=True)
-                        else:
-                            raise ValueError(f"Informe um valor no parametro using_methodology. Pode ser 1 ou 2.")
+                # for sample in kwargs['evaluate_this_samples']:
+                #     if batch_idx == sample:
+                if batch_idx == 0 or batch_idx == 199:
+                    if kwargs['using_methodology'] == 1:
+                        calculator.process_v1(batch=batch, batch_idx=batch_idx, process_func="process_v1", exec_grad=True, target_layer="model.image_encoder.neck.2")
+                    elif kwargs['using_methodology'] == 2:
+                        calculator.process_v2(batch=batch, batch_idx=batch_idx, process_func="process_v2", exec_grad=True, target_layer="model.image_encoder.neck.2")
+                    else:
+                        raise ValueError(f"Informe um valor no parametro using_methodology. Pode ser 1 ou 2.")
 
         # calculates the inference
         trainer = L.Trainer(accelerator=accelerator, devices=[devices])
