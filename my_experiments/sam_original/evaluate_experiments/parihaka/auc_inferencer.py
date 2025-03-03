@@ -365,7 +365,7 @@ class AUCInferencer(L.LightningModule):
                                 batch_idx=batch_idx,
                                 process_func=process_func,
                                 cam=cam,
-                                sugest_filename=f"using_process_v1_pred_with_grad_cam_{target_layer}_backward_aproach_{2}_in_facie_{facie_idx}_using_{point}_points",
+                                sugest_filename=f"using_process_v1_pred_with_grad_cam_{target_layer}_backward_aproach_{2}_in_facie_{facie}_using_{point}_points",
                                 model_idx=self.model_idx,
                                 using_methodology=self.using_methodology
                             )
@@ -483,7 +483,7 @@ class AUCInferencer(L.LightningModule):
                     
                     if not exec_grad:
                         # execute only if execute test
-                        plot_facie_with_prompts(facie_idx=facie_idx, point_coords_positive=point_coords_positive, point_coords_negative=point_coords_negative, region=region.cpu().numpy(), batch_idx=batch_idx, process_func=process_func, model_idx=self.model_idx, using_methodology=self.using_methodology)
+                        plot_facie_with_prompts(facie_idx=facie, point_coords_positive=point_coords_positive, point_coords_negative=point_coords_negative, region=region.cpu().numpy(), batch_idx=batch_idx, process_func=process_func, model_idx=self.model_idx, using_methodology=self.using_methodology)
                     
                     pos_idx = 0
                     neg_idx = 0
@@ -548,7 +548,7 @@ class AUCInferencer(L.LightningModule):
                                 batch_idx=batch_idx,
                                 process_func=process_func,
                                 cam=cam,
-                                sugest_filename=f"using_process_v2_pred_with_grad_cam_{target_layer}_backward_aproach_{2}_in_facie_{facie_idx}_using_{point}_points",
+                                sugest_filename=f"using_process_v2_pred_with_grad_cam_{target_layer}_backward_aproach_{2}_in_facie_{facie}_using_{point}_points",
                                 model_idx=self.model_idx,
                                 using_methodology=self.using_methodology
                             )
@@ -909,19 +909,19 @@ class AUCInferencer(L.LightningModule):
         calculator = AUCInferencer(model, data_module, **kwargs)
 
         # calculates the grad-cam
-        if not kwargs['execute_only_predictions']:
-            print(f"***** Using methodology process_v{kwargs['using_methodology']} *****")
-            for batch_idx, batch in enumerate(tqdm(calculator.dataloader, desc="Processing Grad-CAM in batches")):
-                # apply grad-cam only specific images
-                # for sample in kwargs['evaluate_this_samples']:
-                #     if batch_idx == sample:
-                if batch_idx == 0 or batch_idx == 199:
-                    if kwargs['using_methodology'] == 1:
-                        calculator.process_v1(batch=batch, batch_idx=batch_idx, process_func="process_v1", exec_grad=True, target_layer="model.image_encoder.neck.2")
-                    elif kwargs['using_methodology'] == 2:
-                        calculator.process_v2(batch=batch, batch_idx=batch_idx, process_func="process_v2", exec_grad=True, target_layer="model.image_encoder.neck.2")
-                    else:
-                        raise ValueError(f"Informe um valor no parametro using_methodology. Pode ser 1 ou 2.")
+        # if not kwargs['execute_only_predictions']:
+        #     print(f"***** Using methodology process_v{kwargs['using_methodology']} *****")
+        #     for batch_idx, batch in enumerate(tqdm(calculator.dataloader, desc="Processing Grad-CAM in batches")):
+        #         # apply grad-cam only specific images
+        #         # for sample in kwargs['evaluate_this_samples']:
+        #         #     if batch_idx == sample:
+        #         if batch_idx == 0 or batch_idx == 199:
+        #             if kwargs['using_methodology'] == 1:
+        #                 calculator.process_v1(batch=batch, batch_idx=batch_idx, process_func="process_v1", exec_grad=True, target_layer="model.image_encoder.neck.2")
+        #             elif kwargs['using_methodology'] == 2:
+        #                 calculator.process_v2(batch=batch, batch_idx=batch_idx, process_func="process_v2", exec_grad=True, target_layer="model.image_encoder.neck.2")
+        #             else:
+        #                 raise ValueError(f"Informe um valor no parametro using_methodology. Pode ser 1 ou 2.")
 
         # calculates the inference
         trainer = L.Trainer(accelerator=accelerator, devices=[devices])

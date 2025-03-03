@@ -186,7 +186,7 @@ if __name__ == "__main__":
         model_name="sam_vit_b_experiment_4",
         ckpt_file=ckpt_file_exp2,
         another_args={
-            "apply_freeze": {"prompt_encoder": False, "image_encoder": False, "mask_decoder": False},
+            "apply_freeze": {"prompt_encoder": False, "image_encoder": True, "mask_decoder": False},
             "apply_adapter": {}
         },
         num_classes = 3,
