@@ -282,7 +282,7 @@ class AUCInferencer(L.LightningModule):
         return self.dataloader
     
     """ version 1 """
-    def process_v1(self, batch, batch_idx, process_func, exec_grad:bool=False, target_layer:str="model.mask_decoder.output_upscaling.3"):
+    def process_v1(self, batch, batch_idx, process_func, exec_grad:bool=False, target_layer:str="model.mask_decoder.output_upscaling.3", devices:int = 1):
         """ Process the batch sended by test_step """
         
         # processing default dataset of minerva
@@ -333,7 +333,7 @@ class AUCInferencer(L.LightningModule):
                         # calculate GRAD-CAM
                         if exec_grad:
                             # print(f"Executing Grad-CAM in {target_layer}")
-                            grad_cam = GradCAM(model=self.model, target_layer=target_layer)
+                            grad_cam = GradCAM(model=self.model, target_layer=target_layer, gpu_id=devices)
                             cam, output_pred = grad_cam.generate_cam(batch=batch, label=real_label, backward_aproach=2)
                             mask = (output_pred > 0.0).float()
 
@@ -446,7 +446,7 @@ class AUCInferencer(L.LightningModule):
             return batch_preds
 
     """ version 2 """
-    def process_v2(self, batch, batch_idx, process_func, exec_grad:bool=False, target_layer:str="model.mask_decoder.output_upscaling.3"):
+    def process_v2(self, batch, batch_idx, process_func, exec_grad:bool=False, target_layer:str="model.mask_decoder.output_upscaling.3", devices:int = 1):
         """ Process the batch sended by test_step """
         
         # processing default dataset of minerva
@@ -517,7 +517,7 @@ class AUCInferencer(L.LightningModule):
                         # calculate GRAD-CAM
                         if exec_grad:
                             # print(f"Executing Grad-CAM in {target_layer}")
-                            grad_cam = GradCAM(model=self.model, target_layer=target_layer)
+                            grad_cam = GradCAM(model=self.model, target_layer=target_layer, gpu_id=devices)
                             cam, output_pred = grad_cam.generate_cam(batch=batch, label=region, backward_aproach=2)
                             mask = (output_pred > 0.0).float()
 
@@ -917,9 +917,9 @@ class AUCInferencer(L.LightningModule):
                 #     if batch_idx == sample:
                 if batch_idx == 0 or batch_idx == 199:
                     if kwargs['using_methodology'] == 1:
-                        calculator.process_v1(batch=batch, batch_idx=batch_idx, process_func="process_v1", exec_grad=True, target_layer="model.image_encoder.neck.2")
+                        calculator.process_v1(batch=batch, batch_idx=batch_idx, process_func="process_v1", exec_grad=True, devices=devices) # target_layer="model.image_encoder.neck.2"
                     elif kwargs['using_methodology'] == 2:
-                        calculator.process_v2(batch=batch, batch_idx=batch_idx, process_func="process_v2", exec_grad=True, target_layer="model.image_encoder.neck.2")
+                        calculator.process_v2(batch=batch, batch_idx=batch_idx, process_func="process_v2", exec_grad=True, devices=devices) # target_layer="model.image_encoder.neck.2"
                     else:
                         raise ValueError(f"Informe um valor no parametro using_methodology. Pode ser 1 ou 2.")
 

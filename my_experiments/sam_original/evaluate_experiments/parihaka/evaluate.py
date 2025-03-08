@@ -152,7 +152,7 @@ def main():
     single_channel = False
     num_points = 10
     using_methodology = 2 # 1 for use process_v1() or 2 for use process_v2()
-    evaluate_this_samples = None#[0, 199]
+    evaluate_this_samples = None #[0, 199]
     
     finetuned_models_path = Path.cwd() / "tmp" / "logs"
     
@@ -184,7 +184,7 @@ def main():
                         return_prediction_only=True,
                         apply_load_from_checkpoint=True
                     )
-                elif path.name == "sam_vit_b_experiment_3":
+                elif path.name == "sam_vit_b_experiment_3" or path.name == "sam_vit_b_experiment_4_with_skeleton" or path.name == "sam_vit_b_experiment_4_with_percentage_of_pixels_in_grid":
                     model_instantiator_func = init_sam(
                         model_name=path.name,
                         ckpt_file=ckpt_file,
@@ -195,20 +195,9 @@ def main():
                         return_prediction_only=True,
                         apply_load_from_checkpoint=True
                     )
-                elif path.name == "sam_vit_b_experiment_4":
-                    model_instantiator_func = init_sam(
-                        model_name=path.name,
-                        ckpt_file=ckpt_file,
-                        another_args={
-                            "apply_freeze": {"prompt_encoder": False, "image_encoder": False, "mask_decoder": False},
-                            "apply_adapter": {}
-                        },
-                        num_classes = 3,
-                        return_prediction_only=True,
-                        apply_load_from_checkpoint=True
-                    )
                 else:
-                    raise ValueError(f"Unknown model: {path.name}")
+                    print(f"Unknown model: {path.name}. Continue for next model...")
+                    continue
                 
                 print(f"Reading Folder: {path.name}")
                 model_name = model_instantiator_func['model_name']

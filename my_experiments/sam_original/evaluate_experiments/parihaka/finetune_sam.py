@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from common import get_trainer_pipeline
 from init_experiment import init_sam
 from common import get_data_module_for_sam
-from dataset import DatasetForSAM_experiment_1, DatasetForSAM_experiment_2, DatasetForSAM_experiment_3
+from dataset import DatasetForSAM_experiment_1, DatasetForSAM_experiment_2, DatasetForSAM_experiment_3, DatasetForSAM_experiment_3_v2, DatasetForSAM_experiment_3_v3
 
 def train(
         data_module,
@@ -98,15 +98,16 @@ def check_dataset(
     print(f"Train batch label (Y) shape: {check_batch[0]['label'].shape} - type: {type(check_batch[0]['label'])}")
     print(f"Train batch label (original_size) shape: {check_batch[0]['original_size']} - type: {type(check_batch[0]['original_size'])}")
 
-    if model_info['model_name'] == 'sam_vit_b_experiment_3' or model_info['model_name'] == 'sam_vit_b_experiment_4':
+    if model_info['model_name'] == 'sam_vit_b_experiment_3' or model_info['model_name'] == 'sam_vit_b_experiment_4_with_percentage_of_pixels_in_grid' or model_info['model_name'] == 'sam_vit_b_experiment_4_with_skeleton':
         print(f"Train batch point_coords shape: {check_batch[0]['point_coords'].shape} - type: {type(check_batch[0]['point_coords'])}")
         print(f"Train batch point_labels shape: {check_batch[0]['point_labels'].shape} - type: {type(check_batch[0]['point_labels'])}")
     
     print(f"O Batch (de tamanho {len(check_batch)}) possui: {check_batch[0]['image'].shape[0]} canais, {check_batch[0]['image'].shape[1]} altura e {check_batch[0]['image'].shape[2]} largura.")
 
     # Obtendo a imagem e a label do batch
-    if model_info['model_name'] == 'sam_vit_b_experiment_3' or model_info['model_name'] == 'sam_vit_b_experiment_4':
-        points = check_batch[0]['point_coords']
+    if model_info['model_name'] == 'sam_vit_b_experiment_3' or model_info['model_name'] == 'sam_vit_b_experiment_4_with_percentage_of_pixels_in_grid' or model_info['model_name'] == 'sam_vit_b_experiment_4_with_skeleton':
+        points = check_batch[0]['point_coords'] # (shape: torch.Size([1, 10, 2]))
+        point_labels = check_batch[0]['point_labels'] # (shape: torch.Size([1, 10]))
     image = check_batch[0]['image']#.squeeze(0)  # Remover a dimensão do batch (1, 3, 1006, 590) -> (3, 1006, 590)
     label = check_batch[0]['label']#.squeeze(0)  # Remover a dimensão do batch (1, 1, 1006, 590) -> (1, 1006, 590)
 
@@ -122,22 +123,30 @@ def check_dataset(
     axes[0].set_title("Imagem")
     axes[0].axis('off')
 
-    if model_info['model_name'] == 'sam_vit_b_experiment_3' or model_info['model_name'] == 'sam_vit_b_experiment_4':
+    if model_info['model_name'] == 'sam_vit_b_experiment_3' or model_info['model_name'] == 'sam_vit_b_experiment_4_with_percentage_of_pixels_in_grid' or model_info['model_name'] == 'sam_vit_b_experiment_4_with_skeleton':
         # Plotando os pontos na imagem
-        for point in points:
-            for y, x in point:
-                axes[0].scatter(y, x, color='red', s=50, marker='x', label='Ponto')
+        for point, point_label in zip(points, point_labels):
+            for i, coord in enumerate(point):
+                y, x = coord
+                if point_label[i] == 0:
+                    axes[0].scatter(y, x, color='red', s=50, marker='x', label='Ponto')
+                else:
+                    axes[0].scatter(y, x, color='green', s=50, marker='x', label='Ponto')
 
     # Label (provavelmente uma máscara ou rótulo binário)
     axes[1].imshow(label, cmap='gray')
     axes[1].set_title("Label")
     axes[1].axis('off')
 
-    if model_info['model_name'] == 'sam_vit_b_experiment_3' or model_info['model_name'] == 'sam_vit_b_experiment_4':
+    if model_info['model_name'] == 'sam_vit_b_experiment_3' or model_info['model_name'] == 'sam_vit_b_experiment_4_with_percentage_of_pixels_in_grid' or model_info['model_name'] == 'sam_vit_b_experiment_4_with_skeleton':
         # plotando os pontos na label
-        for point in points:
-            for y, x in point:
-                axes[1].scatter(y, x, color='red', s=50, marker='x', label='Ponto')
+        for point, point_label in zip(points, point_labels):
+            for i, coord in enumerate(point):
+                y, x = coord
+                if point_label[i] == 0:
+                    axes[1].scatter(y, x, color='red', s=50, marker='x', label='Ponto')
+                else:
+                    axes[1].scatter(y, x, color='green', s=50, marker='x', label='Ponto')
 
     os.makedirs('tmp', exist_ok=True)
     output_path = f"tmp/{filename}.png"
@@ -151,7 +160,7 @@ if __name__ == "__main__":
     root_data_dir = "/workspaces/Minerva-Discovery/shared_data/seam_ai_datasets/seam_ai/images"
     root_annotation_dir = "/workspaces/Minerva-Discovery/shared_data/seam_ai_datasets/seam_ai/annotations"
     ckpt_file = "/workspaces/Minerva-Discovery/shared_data/weights_sam/checkpoints_sam/sam_vit_b_01ec64.pth"
-    ckpt_file_exp2 = "/workspaces/Minerva-Discovery/my_experiments/sam_original/evaluate_experiments/parihaka/tmp/logs/sam_vit_b_experiment_2/seam_ai/checkpoints/last.ckpt"
+    
     img_size = (1006,590)
 
     print("Loading model for experiment 1")
@@ -180,17 +189,27 @@ if __name__ == "__main__":
         },
         num_classes = 3
     )
-    # special experiment (using checkpoint 2 in experiment 3)
-    print("Loading model for experiment 4")
-    model_info_experiment_4 = init_sam(
-        model_name="sam_vit_b_experiment_4",
-        ckpt_file=ckpt_file_exp2,
+    # special experiment (experiment 3 with version 3 of SAMDataset)
+    print("Loading model for experiment 4 with percentage of pixels in grid")
+    model_info_experiment_4_v3 = init_sam(
+        model_name="sam_vit_b_experiment_4_with_percentage_of_pixels_in_grid",
+        ckpt_file=ckpt_file,
         another_args={
             "apply_freeze": {"prompt_encoder": False, "image_encoder": False, "mask_decoder": False},
             "apply_adapter": {}
         },
-        num_classes = 3,
-        apply_load_from_checkpoint = True
+        num_classes = 3
+    )
+    # special experiment (experiment 3 with version 2 of SAMDataset)
+    print("Loading model for experiment 4 with skeleton")
+    model_info_experiment_4_v2 = init_sam(
+        model_name="sam_vit_b_experiment_4_with_skeleton",
+        ckpt_file=ckpt_file,
+        another_args={
+            "apply_freeze": {"prompt_encoder": False, "image_encoder": False, "mask_decoder": False},
+            "apply_adapter": {}
+        },
+        num_classes = 3
     )
 
     print("-"*80)
@@ -203,8 +222,11 @@ if __name__ == "__main__":
     print("Checking data module for experiment 3")
     data_module_exp3 = check_dataset(dataset_class=DatasetForSAM_experiment_3, dataset_params={"num_points": 3}, root_data_dir=root_data_dir, root_annotation_dir=root_annotation_dir, model_info=model_info_experiment_3, filename="experiment_3", img_size=img_size)
     print("-"*20)
-    print("Checking data module for experiment 4")
-    data_module_exp4 = check_dataset(dataset_class=DatasetForSAM_experiment_3, dataset_params={"num_points": 3}, root_data_dir=root_data_dir, root_annotation_dir=root_annotation_dir, model_info=model_info_experiment_4, filename="experiment_4", img_size=img_size)
+    print("Checking data module for experiment 4 with percentage of pixels")
+    data_module_exp4_v3 = check_dataset(dataset_class=DatasetForSAM_experiment_3_v3, dataset_params={"num_points": 3}, root_data_dir=root_data_dir, root_annotation_dir=root_annotation_dir, model_info=model_info_experiment_4_v3, filename="experiment_4_v3", img_size=img_size)
+    print("-"*20)
+    print("Checking data module for experiment 4 with skeleton")
+    data_module_exp4_v2 = check_dataset(dataset_class=DatasetForSAM_experiment_3_v2, dataset_params={"num_points": 5}, root_data_dir=root_data_dir, root_annotation_dir=root_annotation_dir, model_info=model_info_experiment_4_v2, filename="experiment_4_v2", img_size=img_size)
     print("-"*80)
 
     print("\/"*40)
@@ -222,8 +244,13 @@ if __name__ == "__main__":
     train(data_module=data_module_exp3, model_info=model_info_experiment_3, devices=1, is_debug=False)
     del data_module_exp3
     print("-"*20)
-    print("Training experiment 4")
-    train(data_module=data_module_exp4, model_info=model_info_experiment_4, devices=1, is_debug=False)
+    # print("Training experiment 4 with percentage of pixels")
+    # train(data_module=data_module_exp4_v3, model_info=model_info_experiment_4_v3, devices=1, is_debug=False)
+    del data_module_exp4_v3
+    # print("-"*20)
+    print("Training experiment 4 with skeleton")
+    train(data_module=data_module_exp4_v2, model_info=model_info_experiment_4_v2, devices=1, is_debug=False)
+    del data_module_exp4_v2
     print("-"*80)
 
     print("Everything is ok. Bye!")
